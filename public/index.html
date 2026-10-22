@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>document.documentElement.classList.add('js')</script>
+<title>{{meta.title}}</title>
+<meta name="description" content="{{meta.desc}}">
+<meta property="og:title" content="{{meta.title}}">
+<meta property="og:description" content="{{meta.desc}}">
+<meta property="og:locale" content="{{og_locale}}">
+<meta property="og:image" content="/img/work/hero.jpg">
+<link rel="alternate" hreflang="ru" href="/">
+<link rel="alternate" hreflang="kk" href="/kk/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/site.css">
+<link rel="icon" href="/img/brand/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<header class="top" id="top">
+  <div class="wrap nav">
+    <a class="logo" href="{{base}}/" aria-label="{{logo.aria}}"><img src="/img/brand/wordmark.png" alt="JAQAIYM" width="155" height="34"></a>
+    <nav class="menu" aria-label="{{nav.aria}}">
+      <a href="#categories">{{nav.categories}}</a><a href="#works">{{nav.works}}</a><a href="#how">{{nav.how}}</a><a href="#contact">{{nav.contact}}</a>
+    </nav>
+    <div class="nav-r">
+      <a class="lang" href="{{alt_href}}" hreflang="{{alt_lang}}" lang="{{alt_lang}}" aria-label="{{lang.switch.aria}}" data-lang-switch>{{lang.switch}}</a>
+      <a class="btn sm" href="{{base}}/request?from=/%23top" data-track="cta_header">{{cta.tell}}</a>
+    </div>
+  </div>
+</header>
+
+<main>
+<!-- ========== HERO ========== -->
+<section class="hero">
+  <div class="wrap hero-g">
+    <div>
+      <div class="eyebrow">{{hero.eyebrow}}</div>
+      <h1>{{hero.h1}}</h1>
+      <p class="lead">{{hero.lead}}</p>
+      <div class="hero-cta">
+        <a href="{{base}}/request?from=/%23top" class="btn" data-track="cta_hero">{{hero.btn1}}</a>
+        <a href="#works" class="btn ghost">{{hero.btn2}}</a>
+      </div>
+      <div class="hero-note"><span>{{hero.note1}}</span><span>{{hero.note2}}</span><span>{{hero.note3}}</span></div>
+    </div>
+    <div class="arch rv">
+      <img src="/img/work/hero.jpg" alt="{{hero.alt}}" width="1200" height="1500" fetchpriority="high">
+      <div class="cap">{{hero.cap}}<small>{{hero.cap.sub}}</small></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== КАТЕГОРИИ ========== -->
+<section id="categories">
+  <div class="wrap">
+    <div class="head rv">
+      <div><div class="eyebrow">{{cats.eyebrow}}</div><h2>{{cats.h2}}</h2></div>
+      <p>{{cats.p}}</p>
+    </div>
+    <div class="cats">
+      <a class="cat rv" href="{{base}}/request?category=kitchen&from=/%23categories" data-track="cta_category">
+        <img src="/img/work/k-1.jpg" alt="" loading="lazy">
+        <div class="in"><h3>{{cat.kitchen}}</h3><p>{{cat.kitchen.p}}</p><span class="go">{{cat.go}}</span></div>
+      </a>
+      <a class="cat rv" style="--d:.08s" href="{{base}}/request?category=wardrobe&from=/%23categories" data-track="cta_category">
+        <img src="/img/work/w-2.jpg" alt="" loading="lazy">
+        <div class="in"><h3>{{cat.wardrobe}}</h3><p>{{cat.wardrobe.p}}</p><span class="go">{{cat.go}}</span></div>
+      </a>
+      <a class="cat rv" style="--d:.16s" href="{{base}}/request?category=other_furniture&from=/%23categories" data-track="cta_category">
+        <img src="/img/work/h-1.jpg" alt="" loading="lazy">
+        <div class="in"><h3>{{cat.hall}}</h3><p>{{cat.hall.p}}</p><span class="go">{{cat.go}}</span></div>
+      </a>
+      <a class="cat rv" style="--d:.24s" href="{{base}}/request?category=business&from=/%23categories" data-track="cta_category">
+        <img src="/img/work/lobby-1.jpg" alt="" loading="lazy">
+        <div class="in"><h3>{{cat.biz}}</h3><p>{{cat.biz.p}}</p><span class="go">{{cat.go}}</span></div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ========== ПРОЕКТЫ ========== -->
+<section class="works" id="works">
+  <div class="wrap">
+    <div class="head rv">
+      <div><div class="eyebrow">{{works.eyebrow}}</div><h2>{{works.h2}}</h2></div>
+      <p>{{works.p}}</p>
+    </div>
+
+    <article class="proj rv" id="kitchen-green">
+      <div class="pg" data-gallery>
+        <a href="/img/work/k-1.jpg"><img src="/img/work/k-1.jpg" alt="{{alt.k1}}" loading="lazy"></a>
+        <a href="/img/work/k-2.jpg"><img src="/img/work/k-2.jpg" alt="{{alt.k2}}" loading="lazy"></a>
+        <a href="/img/work/k-3.jpg"><img src="/img/work/k-3.jpg" alt="{{alt.k3}}" loading="lazy"></a>
+        <a href="/img/work/k-4.jpg"><img src="/img/work/k-4.jpg" alt="{{alt.k4}}" loading="lazy"></a>
+        <a href="/img/work/k-5.jpg" hidden></a><a href="/img/work/k-6.jpg" hidden></a><a href="/img/work/k-7.jpg" hidden></a><a href="/img/work/k-8.jpg" hidden></a><a href="/img/work/k-9.jpg" hidden></a>
+      </div>
+      <div class="pi">
+        <div class="tag">{{proj.kitchen.tag}}</div>
+        <h3>{{proj.kitchen.title}}</h3>
+        <p>{{proj.kitchen.p}}</p>
+        <a class="btn" href="{{base}}/request?category=kitchen&project_id=kitchen-green&from=/%23kitchen-green" data-track="cta_similar">{{works.btn}}</a>
+      </div>
+    </article>
+
+    <article class="proj rv" id="wardrobe-dressing">
+      <div class="pg" data-gallery>
+        <a href="/img/work/w-1.jpg"><img src="/img/work/w-1.jpg" alt="{{alt.w1}}" loading="lazy"></a>
+        <a href="/img/work/w-2.jpg"><img src="/img/work/w-2.jpg" alt="{{alt.w2}}" loading="lazy"></a>
+        <a href="/img/work/w-3.jpg"><img src="/img/work/w-3.jpg" alt="{{alt.w3}}" loading="lazy"></a>
+        <a href="/img/work/w-4.jpg"><img src="/img/work/w-4.jpg" alt="{{alt.w4}}" loading="lazy"></a>
+        <a href="/img/work/w-5.jpg" hidden></a><a href="/img/work/w-6.jpg" hidden></a><a href="/img/work/w-7.jpg" hidden></a><a href="/img/work/w-8.jpg" hidden></a>
+      </div>
+      <div class="pi">
+        <div class="tag">{{proj.wardrobe.tag}}</div>
+        <h3>{{proj.wardrobe.title}}</h3>
+        <p>{{proj.wardrobe.p}}</p>
+        <a class="btn" href="{{base}}/request?category=wardrobe&project_id=wardrobe-dressing&from=/%23wardrobe-dressing" data-track="cta_similar">{{works.btn}}</a>
+      </div>
+    </article>
+
+    <article class="proj rv" id="hallway-niche">
+      <div class="pg" data-gallery>
+        <a href="/img/work/h-1.jpg"><img src="/img/work/h-1.jpg" alt="{{alt.h1}}" loading="lazy"></a>
+        <a href="/img/work/h-2.jpg"><img src="/img/work/h-2.jpg" alt="{{alt.h2}}" loading="lazy"></a>
+        <a href="/img/work/h-3.jpg"><img src="/img/work/h-3.jpg" alt="{{alt.h3}}" loading="lazy"></a>
+        <a href="/img/work/h-4.jpg"><img src="/img/work/h-4.jpg" alt="{{alt.h4}}" loading="lazy"></a>
+        <a href="/img/work/h-5.jpg" hidden></a><a href="/img/work/h-6.jpg" hidden></a>
+      </div>
+      <div class="pi">
+        <div class="tag">{{proj.hall.tag}}</div>
+        <h3>{{proj.hall.title}}</h3>
+        <p>{{proj.hall.p}}</p>
+        <a class="btn" href="{{base}}/request?category=other_furniture&project_id=hallway-niche&from=/%23hallway-niche" data-track="cta_similar">{{works.btn}}</a>
+      </div>
+    </article>
+
+    <article class="proj rv" id="residential-complex">
+      <div class="pg" data-gallery>
+        <a href="/img/work/lobby-1.jpg"><img src="/img/work/lobby-1.jpg" alt="{{alt.b1}}" loading="lazy"></a>
+        <a href="/img/work/lobby-2.jpg"><img src="/img/work/lobby-2.jpg" alt="{{alt.b2}}" loading="lazy"></a>
+        <a href="/img/work/lobby-3.jpg"><img src="/img/work/lobby-3.jpg" alt="{{alt.b3}}" loading="lazy"></a>
+        <a href="/img/work/lobby-4.jpg"><img src="/img/work/lobby-4.jpg" alt="{{alt.b4}}" loading="lazy"></a>
+        <a href="/img/work/lobby-5.jpg" hidden></a><a href="/img/work/lobby-6.jpg" hidden></a><a href="/img/work/lobby-7.jpg" hidden></a>
+      </div>
+      <div class="pi">
+        <div class="tag">{{proj.biz.tag}}</div>
+        <h3>{{proj.biz.title}}</h3>
+        <p>{{proj.biz.p}}</p>
+        <a class="btn" href="{{base}}/request?category=business&project_id=residential-complex&from=/%23residential-complex" data-track="cta_similar">{{works.btn}}</a>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- ========== КАК ЭТО РАБОТАЕТ ========== -->
+<section id="how">
+  <div class="wrap">
+    <div class="head rv">
+      <div><div class="eyebrow">{{how.eyebrow}}</div><h2>{{how.h2}}</h2></div>
+      <p>{{how.p}}</p>
+    </div>
+    <div class="steps">
+      <div class="step rv"><b>1</b><h3>{{how.1.h}}</h3><p>{{how.1.p}}</p></div>
+      <div class="step rv" style="--d:.08s"><b>2</b><h3>{{how.2.h}}</h3><p>{{how.2.p}}</p></div>
+      <div class="step rv" style="--d:.16s"><b>3</b><h3>{{how.3.h}}</h3><p>{{how.3.p}}</p></div>
+      <div class="step rv" style="--d:.24s"><b>4</b><h3>{{how.4.h}}</h3><p>{{how.4.p}}</p></div>
+    </div>
+    <p class="fine rv">{{how.fine}}</p>
+  </div>
+</section>
+
+<!-- ========== CTA ========== -->
+<section style="padding-top:0" id="contact">
+  <div class="cta">
+    <div class="wrap cta-g">
+      <div class="rv"><h2>{{cta.h2}}</h2><p>{{cta.p}}</p></div>
+      <div class="row rv"><a class="btn" href="{{base}}/request?from=/%23contact" data-track="cta_footer">{{hero.btn1}}</a><button class="btn ghost" type="button" data-quick="contact">{{cta.btn2}}</button></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap fg">
+    <div><a class="logo" href="{{base}}/" aria-label="{{logo.aria}}"><img src="/img/brand/wordmark.png" alt="JAQAIYM" width="136" height="30"></a><div>{{brand.tagline}}</div><div>{{foot.cities}}</div></div>
+    <div><b>{{foot.contacts}}</b><a class="tel" id="ph" href="tel:{{phone_tel}}">{{phone}}</a><br><a id="wa" href="https://wa.me/{{wa}}" target="_blank" rel="noopener">WhatsApp</a></div>
+    <div><b>{{foot.docs}}</b><a href="{{base}}/privacy.html">{{foot.policy}}</a></div>
+  </div>
+</footer>
+
+<div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="{{lb.aria}}"><button class="x" aria-label="{{lb.close}}">×</button><button class="p" aria-label="{{lb.prev}}">‹</button><img alt=""><button class="n" aria-label="{{lb.next}}">›</button></div>
+
+{{boot}}
+<script src="/js/common.js"></script>
+<script>
+(function(){
+  const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+  JQ_wireFab();
+  // шапка
+  const hd=$('#top'); const onS=()=>hd.classList.toggle('s',scrollY>20); onS(); addEventListener('scroll',onS,{passive:true});
+  // появление блоков (с запасным вариантом)
+  const rv=$$('.rv'), show=el=>el.classList.add('v');
+  if('IntersectionObserver' in window){const io=new IntersectionObserver(es=>es.forEach(x=>{if(x.isIntersecting){show(x.target);io.unobserve(x.target)}}),{threshold:.12});rv.forEach(el=>io.observe(el));}
+  const fb=()=>rv.forEach(el=>{if(el.getBoundingClientRect().top<innerHeight*.95)show(el)});
+  addEventListener('scroll',fb,{passive:true});addEventListener('load',fb);setTimeout(fb,300);setTimeout(()=>rv.forEach(show),4000);
+  document.addEventListener('click',e=>{const a=e.target.closest('[data-track]');if(a)JQ.track('request_cta_click',{cta:a.dataset.track})});
+  // галерея
+  const lb=$('#lb'),img=lb.querySelector('img');let list=[],i=0;
+  const set=n=>{i=(n+list.length)%list.length;img.src=list[i];};
+  const close=()=>{lb.classList.remove('on');document.body.style.overflow=''};
+  document.addEventListener('click',e=>{
+    const a=e.target.closest('[data-gallery] a');
+    if(a){e.preventDefault();list=[...a.parentElement.querySelectorAll('a')].map(x=>x.getAttribute('href'));i=list.indexOf(a.getAttribute('href'));set(i);lb.classList.add('on');document.body.style.overflow='hidden';return}
+    if(!lb.classList.contains('on'))return;
+    if(e.target.closest('.x')||e.target===lb)close();else if(e.target.closest('.p'))set(i-1);else if(e.target.closest('.n'))set(i+1);
+  });
+  document.addEventListener('keydown',e=>{if(!lb.classList.contains('on'))return;if(e.key==='Escape')close();if(e.key==='ArrowLeft')set(i-1);if(e.key==='ArrowRight')set(i+1)});
+})();
+</script>
+</body>
+</html>

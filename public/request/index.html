@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>document.documentElement.classList.add('js')</script>
+<title>{{wz.title}}</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/site.css">
+<link rel="stylesheet" href="/css/wizard.css">
+<link rel="icon" href="/img/brand/favicon.svg" type="image/svg+xml">
+</head>
+<body class="wz">
+<header class="wz-top">
+  <div class="wrap">
+    <div class="wz-bar">
+      <a class="logo" href="{{base}}/" aria-label="{{logo.aria}}"><img src="/img/brand/wordmark.png" alt="JAQAIYM" width="127" height="28"></a>
+      <div class="wz-r">
+        <a class="lang" href="{{alt_href}}" hreflang="{{alt_lang}}" lang="{{alt_lang}}" aria-label="{{lang.switch.aria}}" data-lang-switch>{{lang.switch}}</a>
+        <button class="wz-help" id="help" type="button" data-quick="wizard"><span class="long">{{wz.help}}</span><span class="short">{{wz.help.short}}</span></button>
+        <a class="wz-x" href="{{base}}/" aria-label="{{wz.exit}}" title="{{wz.exit}}">×</a>
+      </div>
+    </div>
+    <div class="wz-meta" id="meta" aria-live="polite"></div>
+    <div class="prog" id="prog" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  </div>
+</header>
+
+<main class="wz-main" id="app" tabindex="-1">
+  <noscript><p class="wz-sub">{{wz.noscript}} <a class="link" href="https://wa.me/{{wa}}">WhatsApp</a></p></noscript>
+</main>
+
+<div class="wz-nav" id="nav" hidden><div class="in"><button class="back" id="back" type="button"></button><button class="btn" id="next" type="button"></button></div></div>
+
+{{boot}}
+<script src="/js/common.js"></script>
+<script src="/js/wizard.js"></script>
+</body>
+</html>

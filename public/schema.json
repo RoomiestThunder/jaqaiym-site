@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "_note": "Единый словарь значений и подписей: читает и фронтенд (/request), и сервер (карточка заявки). Значения (ключи) в данных не менять без миграции.",
+  "category": {
+    "kitchen": "Кухня",
+    "wardrobe": "Шкаф / гардеробная",
+    "other_furniture": "Прихожая, хранение, другая мебель",
+    "business": "Мебель для бизнеса",
+    "other": "Другое"
+  },
+  "category_short": {
+    "kitchen": "Кухня",
+    "wardrobe": "Шкаф или гардеробная",
+    "other_furniture": "Прихожая и другая мебель",
+    "business": "Для бизнеса",
+    "other": "Другое, опишу словами"
+  },
+  "premise": {
+    "apartment": "Квартира",
+    "house": "Частный дом",
+    "office": "Офис / коммерческое помещение",
+    "residential_complex": "ЖК / общие зоны",
+    "other": "Другое"
+  },
+  "kitchen_layout": {
+    "straight": "Прямая",
+    "l_shaped": "Угловая",
+    "u_shaped": "П-образная",
+    "parallel": "Параллельная",
+    "island": "С островом",
+    "unknown": "Пока не знаю"
+  },
+  "wardrobe_kind": {
+    "niche": "В нишу",
+    "freestanding": "Отдельно стоящий",
+    "dressing_room": "Гардеробная комната",
+    "unknown": "Пока не знаю"
+  },
+  "business_scope": {
+    "single": "Один объект",
+    "multiple": "Несколько помещений или типовых изделий"
+  },
+  "city": {
+    "astana": "Астана",
+    "almaty": "Алматы"
+  },
+  "style": {
+    "light": "Светлый",
+    "wood": "Под дерево",
+    "dark": "Тёмный",
+    "colorful": "Цветной",
+    "has_example": "Уже есть пример",
+    "undecided": "Пока не определился"
+  },
+  "yes_no": {
+    "yes": "Да",
+    "no": "Нет",
+    "unknown": "Не знаю"
+  },
+  "doors": {
+    "swing": "Распашные",
+    "sliding": "Раздвижные",
+    "open": "Открытое хранение",
+    "unknown": "Не знаю"
+  },
+  "storage": {
+    "hanging": "Одежда на плечиках",
+    "shelves": "Полки",
+    "drawers": "Ящики",
+    "shoes": "Обувь",
+    "mixed": "Всё понемногу"
+  },
+  "purpose": {
+    "tv": "ТВ-зона",
+    "kids": "Детская",
+    "hallway": "Прихожая",
+    "bathroom": "Санузел",
+    "workplace": "Рабочее место",
+    "other": "Другое"
+  },
+  "budget": {
+    "_draft": "ЧЕРНОВЫЕ диапазоны: владелец утверждает после оценки типичных заказов или убирает блок целиком",
+    "lt_1m": "до 1 млн ₸",
+    "1_3m": "1–3 млн ₸",
+    "3_6m": "3–6 млн ₸",
+    "gt_6m": "от 6 млн ₸",
+    "undecided": "Ещё не определился"
+  },
+  "timeframe": {
+    "asap": "Как можно скорее",
+    "month": "В ближайший месяц",
+    "quarter": "В течение 2–3 месяцев",
+    "planning": "Пока планирую"
+  },
+  "channel": {
+    "whatsapp": "WhatsApp",
+    "call": "Звонок"
+  },
+  "role": {
+    "owner": "Собственник",
+    "designer": "Дизайнер",
+    "contractor": "Подрядчик",
+    "developer": "Представитель застройщика",
+    "other": "Другое"
+  },
+  "quick_type": {
+    "question": "Задать вопрос",
+    "measure": "Заказать замер",
+    "discuss": "Обсудить проект"
+  },
+  "status": {
+    "new": "Новая",
+    "contacted": "Связались",
+    "measuring": "Замер",
+    "estimating": "Расчёт",
+    "proposal_sent": "КП отправлено",
+    "won": "Договор",
+    "lost": "Отказ"
+  },
+  "limits": {
+    "max_files": 8,
+    "max_file_mb": 10,
+    "file_types": [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "application/pdf"
+    ]
+  }
+}
