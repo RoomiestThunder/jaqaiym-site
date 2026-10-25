@@ -41,10 +41,10 @@ body.wz{background:var(--bg)}
 .opt:hover{box-shadow:inset 0 0 0 1.5px rgba(43,24,14,.45);transform:translateY(-2px)}
 .opt[aria-pressed=true]{box-shadow:inset 0 0 0 2.5px var(--accent),0 10px 24px -14px rgba(180,92,55,.6)}
 .opt[aria-pressed=true]::after{content:"✓";position:absolute;top:10px;right:10px;width:25px;height:25px;border-radius:50%;background:var(--accent);color:#fff;font-size:13px;font-weight:800;display:grid;place-items:center}
-.opt .v{display:grid;place-items:center;aspect-ratio:4/3;background:#f2e8d3;color:var(--ink);overflow:hidden}
+.opt .v{position:relative;display:grid;place-items:center;aspect-ratio:4/3;background:#f2e8d3;color:var(--ink);overflow:hidden}
 .opts.big .opt .v{aspect-ratio:5/4}
 .opt .v svg{width:60%;height:auto;max-height:84%}
-.opt .v img{width:100%;height:100%;object-fit:cover}
+.opt .v img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover}
 .opt .t{padding:13px 15px 15px;font-weight:700;font-size:14.5px;line-height:1.25}
 .opt .t small{display:block;font-weight:500;color:var(--muted);font-size:12.5px;margin-top:4px}
 .opt.txt .t{padding:17px 18px}

@@ -125,12 +125,13 @@ footer{padding:70px 0 110px;color:var(--muted);font-size:14px}
 .fab svg{width:18px;height:18px}
 
 /* окно быстрой заявки */
-.qm{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(36,19,11,.55);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
-.qm.on{display:flex}
-.qm-box{background:var(--bg);border-radius:28px;width:100%;max-width:480px;max-height:calc(100vh - 32px);overflow:auto;padding:34px 32px;position:relative;animation:pop .35s var(--ease)}
+.qm{position:fixed;top:0;right:0;bottom:0;left:0;z-index:200;display:none;background:rgba(36,19,11,.62)}
+.qm.on{display:block}
+.qm-scroll{position:absolute;top:0;right:0;bottom:0;left:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;display:flex;padding:max(14px,env(safe-area-inset-top)) 14px max(14px,env(safe-area-inset-bottom))}
+.qm-box{background:var(--bg);border-radius:28px;width:100%;max-width:480px;margin:auto;padding:34px 32px;position:relative;animation:pop .35s var(--ease)}
 @keyframes pop{from{opacity:0;transform:translateY(14px) scale(.98)}}
-.qm-x{position:absolute;right:16px;top:16px;width:40px;height:40px;border-radius:50%;border:0;background:rgba(43,24,14,.08);cursor:pointer;font-size:20px;line-height:1}
-.qm-x:hover{background:rgba(43,24,14,.16)}
+.qm-x{position:absolute;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));z-index:5;width:46px;height:46px;border-radius:50%;border:0;background:var(--bg);color:var(--ink);box-shadow:0 6px 20px -6px rgba(0,0,0,.45);cursor:pointer;font-size:24px;line-height:1}
+.qm-x:hover{background:#fff}
 .qm h3{font-size:28px;margin-bottom:8px}
 .qm .sub{color:var(--muted);font-size:14.5px;margin-bottom:22px}
 
@@ -189,6 +190,6 @@ textarea.inp{resize:vertical;min-height:90px}
   .nav .btn{padding:11px 14px;font-size:12.5px;white-space:nowrap}
   .cats{grid-template-columns:1fr}
   .steps{grid-template-columns:1fr}
-  .qm-box{padding:28px 22px}
+  .qm-box{padding:64px 20px 24px;border-radius:24px}
   .fab span{display:none}.fab{padding:16px}
 }

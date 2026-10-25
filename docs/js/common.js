@@ -75,8 +75,8 @@
     modal = document.createElement('div');
     modal.className = 'qm'; modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-labelledby', 'qm-t');
     modal.innerHTML = `
-      <div class="qm-box">
-        <button class="qm-x" type="button" aria-label="${t('qm.close')}">×</button>
+      <button class="qm-x" type="button" aria-label="${t('qm.close')}">×</button>
+      <div class="qm-scroll"><div class="qm-box">
         <form id="qf" novalidate>
           <h3 id="qm-t">${t('qm.title')}</h3>
           <p class="sub">${t('qm.sub')}</p>
@@ -97,11 +97,11 @@
           <p class="sub" style="margin:16px 0 0;text-align:center">${t('qm.or')} <a class="link" href="${wa}" target="_blank" rel="noopener">WhatsApp</a></p>
         </form>
         <div class="okbox" id="qok" hidden><div class="big">✓</div><h3>${t('qm.ok.h')}</h3><p class="sub" id="qokn"></p><button class="btn ghost sm" type="button" data-close>${t('qm.close')}</button></div>
-      </div>`;
+      </div></div>`;
     document.body.appendChild(modal);
     const form = modal.querySelector('#qf'), phone = form.phone;
     phone.addEventListener('input', () => { phone.value = JQ.maskPhone(phone.value); phone.closest('.field').classList.remove('err'); });
-    modal.addEventListener('click', e => { if (e.target === modal || e.target.closest('.qm-x') || e.target.closest('[data-close]')) close(); });
+    modal.addEventListener('click', e => { if (e.target === modal || e.target.classList.contains('qm-scroll') || e.target.closest('.qm-x') || e.target.closest('[data-close]')) close(); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.classList.contains('on')) close(); });
     let sid = JQ.uuid();
     form.addEventListener('submit', async e => {
@@ -137,7 +137,7 @@
     if (!modal) build();
     ctx = context || ''; lastFocus = document.activeElement;
     modal.querySelector('#qf').hidden = false; modal.querySelector('#qok').hidden = true;
-    modal.classList.add('on'); document.body.style.overflow = 'hidden';
+    modal.classList.add('on'); document.body.style.overflow = 'hidden'; modal.querySelector('.qm-scroll').scrollTop = 0;
     JQ.track('quick_contact_opened', { from: ctx || location.pathname });
     setTimeout(() => modal.querySelector('[name=phone]').focus(), 50);
   }

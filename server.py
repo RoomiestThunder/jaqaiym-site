@@ -25,6 +25,36 @@ UPLOADS = os.path.join(DATA, 'uploads')
 os.makedirs(UPLOADS, exist_ok=True)
 
 SCHEMA = json.load(open(os.path.join(PUBLIC, 'schema.json'), encoding='utf-8'))
+LIM = SCHEMA['limits']
+MAX_JSON = 200 * 1024
+MAX_FILE = LIM['max_file_mb'] * 1024 * 1024
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get('PORT', 8123))
+BASE_URL = os.environ.get('PUBLIC_BASE_URL', 'http://localhost:%d' % PORT)
+
+tok_path = os.path.join(DATA, 'admin_token.txt')
+ADMIN_TOKEN = os.environ.get('ADMIN_TOKEN')
+if not ADMIN_TOKEN:
+    if os.path.exists(tok_path):
+        ADMIN_TOKEN = open(tok_path).read().strip()
+    else:
+        ADMIN_TOKEN = secrets.token_urlsafe(16)
+        open(tok_path, 'w').write(ADMIN_TOKEN)
+
+db = sqlite3.connect(os.path.join(DATA, 'leads.db'), check_same_thread=False)
+db.row_factory = sqlite3.Row
+db_lock = threading.Lock()
+db.executescript('''
+CREATE TABLE IF NOT EXISTS leads(
+  id INTEGER PRIMARY KEY AUTOINCREMENT, submission_id TEXT UNIQUE NOT NULL,
+  lead_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'new', created_at TEXT NOT NULL,
+  payload TEXT NOT NULL, summary TEXT NOT NULL, phone TEXT,
+  notified INTEGER NOT NULL DEFAULT 0, notify_attempts INTEGER NOT NULL DEFAULT 0, notify_error TEXT);
+CREATE TABLE IF NOT EXISTS attachments(
+  id TEXT PRIMARY KEY, filename TEXT, mime TEXT, size INTEGER, path TEXT,
+  created_at TEXT, lead_id INTEGER);
+''')
+db.commit()
+
 from render import LANGS, PAGES, split_lang, render_page as _render
 
 def render_page(fname, lang, route):
