@@ -90,7 +90,7 @@
           </div>
           <label class="field"><span>${t('qm.message')} <i>— ${t('qm.optional')}</i></span><textarea class="inp" name="message" rows="2" maxlength="1000"></textarea></label>
           <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
-          <label class="check" data-f="consent"><input type="checkbox" name="consent"><span>${t('qm.consent')} <a href="${CFG.policyUrl || '#'}" target="_blank" rel="noopener">${t('foot.policy')}</a></span></label>
+          <label class="check" data-f="consent"><input type="checkbox" name="consent"><span>${t('qm.consent')} <a href="${(CFG.policyUrl || '#') + '#consent'}" target="_blank" rel="noopener">${t('foot.policy')}</a></span></label>
           <div class="msg" data-m="consent">${t('qm.consent.err')}</div>
           <div class="alert" id="qerr"></div>
           <button class="btn" type="submit" style="width:100%;margin-top:14px">${t('qm.submit')}</button>

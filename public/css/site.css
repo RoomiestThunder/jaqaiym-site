@@ -193,3 +193,12 @@ textarea.inp{resize:vertical;min-height:90px}
   .qm-box{padding:64px 20px 24px;border-radius:24px}
   .fab span{display:none}.fab{padding:16px}
 }
+
+/* юридические страницы */
+.legal{font-size:15.5px;color:var(--ink)}
+.legal h2{font-size:clamp(20px,5vw,24px);margin:36px 0 10px;scroll-margin-top:24px}
+.legal p,.legal li{color:#5d5046;margin:8px 0}
+.legal ul{padding-left:22px}
+.legal b{color:var(--ink)}
+.legal mark{background:#ffe9a8;color:var(--ink);padding:1px 5px;border-radius:5px}
+.legal .draft{background:#fff4d6;border-radius:14px;padding:14px 16px;font-size:14px;color:#6b5320;margin-bottom:8px}

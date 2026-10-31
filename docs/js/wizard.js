@@ -235,7 +235,7 @@
         <label class="field"><span>${t('c.role')} <i>— ${t('wz.optional')}</i></span><select class="inp" data-c="role"><option value="">${t('c.role.none')}</option>${Object.keys(L.role).map(k => `<option value="${k}"${C.role === k ? ' selected' : ''}>${L.role[k]}</option>`).join('')}</select></label></div></div>` : ''}
       </div>
       <input class="hp" id="hp" tabindex="-1" autocomplete="off" aria-hidden="true" name="website">
-      <label class="check" id="consentRow"><input type="checkbox" id="consent"${consent ? ' checked' : ''}><span>${t('c.consent')} <a href="${CFG.policyUrl || '#'}" target="_blank" rel="noopener">${t('c.policy')}</a></span></label>
+      <label class="check" id="consentRow"><input type="checkbox" id="consent"${consent ? ' checked' : ''}><span>${t('c.consent')} <a href="${(CFG.policyUrl || '#') + '#consent'}" target="_blank" rel="noopener">${t('c.policy')}</a></span></label>
       <div class="emsg${hasErr('consent') ? ' show' : ''}" id="consentErr" role="alert">${t('c.consent.err')}</div>
     </div>
     <div class="alert${sendError ? ' on' : ''}" id="sendErr" role="alert">${esc(sendError)}</div>`;
