@@ -6,15 +6,15 @@
   ADMIN_TOKEN          токен для /admin (иначе генерируется и хранится в data/admin_token.txt)
   DATA_DIR             папка для базы и файлов (по умолчанию ./data; на хостинге — смонтированный том)
   PORT                 порт (хостинги задают его сами)
-  TELEGRAM_BOT_TOKEN   токен бота для уведомлений
-  TELEGRAM_CHAT_ID     чат, куда слать заявки
-  PUBLIC_BASE_URL      адрес сайта для ссылок в уведомлениях
+  TELEGRAM_BOT_TOKEN   токен бота для уведомлений (только в переменных окружения, не в коде и не в git)
+  TELEGRAM_CHAT_ID     id общего чата команды; у группы он отрицательный, вида -100…  (найти: tools/telegram_setup.py)
+  PUBLIC_BASE_URL      адрес сайта для ссылок в уведомлениях, например https://jaqaiym.kz
 
 Без Telegram уведомления пишутся в data/outbox.log (тестовый канал).
 Только стандартная библиотека Python.
 """
 import http.server, socketserver, json, os, re, sqlite3, secrets, threading, time, uuid
-import urllib.parse, urllib.request, sys, html
+import urllib.parse, urllib.request, urllib.error, sys, html
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from datetime import datetime, timezone
 
@@ -251,13 +251,19 @@ def notify(lead_id):
     ok, error = False, None
     try:
         if bot and chat:
+            # предпросмотр ссылки выключен: в ссылке токен админки, Telegram не должен ходить по ней и показывать карточку в чате
             req = urllib.request.Request('https://api.telegram.org/bot%s/sendMessage' % bot,
-                                         data=json.dumps({'chat_id': chat, 'text': text}).encode(), headers={'Content-Type': 'application/json'})
+                                         data=json.dumps({'chat_id': chat, 'text': text, 'link_preview_options': {'is_disabled': True}}).encode(),
+                                         headers={'Content-Type': 'application/json'})
             urllib.request.urlopen(req, timeout=10).read(); ok = True
         else:
             with open(os.path.join(DATA, 'outbox.log'), 'a', encoding='utf-8') as f:
                 f.write('--- %s ---\n%s\n\n' % (now(), text))
             ok = True
+    except urllib.error.HTTPError as e:      # причина от Telegram («chat not found», «bot was kicked…») видна в админке
+        try: why = json.loads(e.read()).get('description')
+        except Exception: why = None
+        error = ('Telegram %d: %s' % (e.code, why or e.reason))[:300]
     except Exception as e:
         error = str(e)[:300]
     with db_lock:
