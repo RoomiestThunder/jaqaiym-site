@@ -8,13 +8,17 @@
   PORT                 порт (хостинги задают его сами)
   TELEGRAM_BOT_TOKEN   токен бота для уведомлений (только в переменных окружения, не в коде и не в git)
   TELEGRAM_CHAT_ID     id общего чата команды; у группы он отрицательный, вида -100…  (найти: tools/telegram_setup.py)
+  TELEGRAM_JOIN_CODE   секретный код: кто отправит боту /join КОД (или откроет ссылку из админки), тот подписывается на заявки
   PUBLIC_BASE_URL      адрес сайта для ссылок в уведомлениях, например https://jaqaiym.kz
+  UPLOAD_QUOTA_MB      сколько МБ временных файлов можно держать на диске (по умолчанию 500; диск 1 ГБ)
+  MIN_FREE_MB          при меньшем свободном месте загрузка файлов отключается (по умолчанию 150)
 
-Без Telegram уведомления пишутся в data/outbox.log (тестовый канал).
+Заявка уходит в Telegram текстом, фото альбомом, PDF документами; файлы удаляются с диска сразу после отправки.
+Без токена бота уведомления пишутся в data/outbox.log (тестовый канал), файлы живут UNSENT_FILE_DAYS суток.
 Только стандартная библиотека Python.
 """
 import http.server, socketserver, json, os, re, sqlite3, secrets, threading, time, uuid
-import urllib.parse, urllib.request, urllib.error, sys, html
+import urllib.parse, urllib.request, urllib.error, sys, html, shutil
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from datetime import datetime, timezone
 
@@ -52,8 +56,18 @@ CREATE TABLE IF NOT EXISTS leads(
 CREATE TABLE IF NOT EXISTS attachments(
   id TEXT PRIMARY KEY, filename TEXT, mime TEXT, size INTEGER, path TEXT,
   created_at TEXT, lead_id INTEGER);
+CREATE TABLE IF NOT EXISTS tg_subscribers(
+  chat_id TEXT PRIMARY KEY, title TEXT, kind TEXT, joined_at TEXT, active INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS tg_sent(
+  lead_id INTEGER NOT NULL, chat_id TEXT NOT NULL, item TEXT NOT NULL, sent_at TEXT, PRIMARY KEY(lead_id, chat_id, item));
 ''')
+for _t, _c, _d in (('leads', 'tg_targets', 'TEXT'), ('leads', 'next_attempt_at', 'TEXT'), ('leads', 'notified_via', 'TEXT'), ('attachments', 'deleted_at', 'TEXT')):
+    if _c not in {r['name'] for r in db.execute('PRAGMA table_info(%s)' % _t)}:
+        db.execute('ALTER TABLE %s ADD COLUMN %s %s' % (_t, _c, _d))
 db.commit()
+
+QUOTA = int(float(os.environ.get('UPLOAD_QUOTA_MB', 500)) * 1048576)
+MIN_FREE = int(float(os.environ.get('MIN_FREE_MB', 150)) * 1048576)
 
 from render import LANGS, PAGES, split_lang, render_page as _render
 
@@ -237,46 +251,20 @@ def create_lead(clean):
         db.commit()
         return lid, False
 
-# ---------------- уведомления ----------------
-def notify(lead_id):
-    with db_lock:
-        r = db.execute('SELECT * FROM leads WHERE id=?', (lead_id,)).fetchone()
-    if not r or r['notified']: return
+# ---------------- уведомления (Telegram) ----------------
+def lead_text(r, nfiles):
+    """Текст карточки заявки для команды."""
     p = json.loads(r['payload']); c = p['customer']
     head = 'Новая заявка №%d (%s)' % (r['id'], 'быстрая' if r['lead_type'] == 'quick' else 'проект')
     text = '%s\n%s\n\nКонтакт: %s %s (%s)\nИсточник: %s\nКарточка: %s/admin?token=%s#lead-%d' % (
         head, r['summary'], c.get('name') or '—', c['phone'], lab('channel', c.get('preferred_channel')) if c.get('preferred_channel') else 'способ не указан',
         (p.get('source') or {}).get('page') or '—', BASE_URL, ADMIN_TOKEN, r['id'])
-    bot, chat = os.environ.get('TELEGRAM_BOT_TOKEN'), os.environ.get('TELEGRAM_CHAT_ID')
-    ok, error = False, None
-    try:
-        if bot and chat:
-            # предпросмотр ссылки выключен: в ссылке токен админки, Telegram не должен ходить по ней и показывать карточку в чате
-            req = urllib.request.Request('https://api.telegram.org/bot%s/sendMessage' % bot,
-                                         data=json.dumps({'chat_id': chat, 'text': text, 'link_preview_options': {'is_disabled': True}}).encode(),
-                                         headers={'Content-Type': 'application/json'})
-            urllib.request.urlopen(req, timeout=10).read(); ok = True
-        else:
-            with open(os.path.join(DATA, 'outbox.log'), 'a', encoding='utf-8') as f:
-                f.write('--- %s ---\n%s\n\n' % (now(), text))
-            ok = True
-    except urllib.error.HTTPError as e:      # причина от Telegram («chat not found», «bot was kicked…») видна в админке
-        try: why = json.loads(e.read()).get('description')
-        except Exception: why = None
-        error = ('Telegram %d: %s' % (e.code, why or e.reason))[:300]
-    except Exception as e:
-        error = str(e)[:300]
-    with db_lock:
-        db.execute('UPDATE leads SET notified=?, notify_attempts=notify_attempts+1, notify_error=? WHERE id=?', (1 if ok else 0, error, lead_id))
-        db.commit()
+    if nfiles:
+        text += '\nФайлы: %d (придут следом в этот чат)' % nfiles
+    return text
 
-def retry_loop():
-    while True:
-        time.sleep(60)
-        with db_lock:
-            ids = [r['id'] for r in db.execute('SELECT id FROM leads WHERE notified=0 AND notify_attempts<20')]
-        for i in ids: notify(i)
-threading.Thread(target=retry_loop, daemon=True).start()
+from notifier import Notifier
+notifier = Notifier(db, db_lock, lead_text)
 
 # ---------------- HTTP ----------------
 class H(http.server.SimpleHTTPRequestHandler):
@@ -314,6 +302,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             if not self.authed(q): return self.send_json(403, {'error': 'forbidden'})
             with db_lock: r = db.execute('SELECT * FROM attachments WHERE id=?', (m.group(1),)).fetchone()
             if not r: return self.send_json(404, {'error': 'not_found'})
+            if not r['path']: return self.send_json(410, {'error': 'deleted', 'message': 'Файл уже отправлен в Telegram и удалён с сервера'})
             data = open(r['path'], 'rb').read()
             self.send_response(200); self.send_header('Content-Type', r['mime'])
             self.send_header('Content-Length', str(len(data)))
@@ -335,6 +324,14 @@ class H(http.server.SimpleHTTPRequestHandler):
             if st not in SCHEMA['status']: return self.send_json(422, {'error': 'bad_status'})
             with db_lock: db.execute('UPDATE leads SET status=? WHERE id=?', (st, int(m.group(1)))); db.commit()
             return self.send_json(200, {'ok': True})
+        m = re.fullmatch(r'/api/admin/leads/(\d+)/resend', u.path)
+        if m:
+            if not self.authed(q): return self.send_json(403, {'error': 'forbidden'})
+            notifier.resend(int(m.group(1))); return self.send_json(200, {'ok': True})
+        m = re.fullmatch(r'/api/admin/subscribers/(-?\d+)/remove', u.path)
+        if m:
+            if not self.authed(q): return self.send_json(403, {'error': 'forbidden'})
+            notifier.deactivate_subscriber(m.group(1)); return self.send_json(200, {'ok': True})
         self.send_json(404, {'error': 'not_found'})
 
     def leads(self, n):
@@ -350,13 +347,15 @@ class H(http.server.SimpleHTTPRequestHandler):
         except ValueError as e: return self.send_json(422, {'error': 'validation', 'errors': {'project.attachment_ids': str(e)}})
         except Exception as e:
             sys.stderr.write('LEAD SAVE ERROR %r\n' % e); return self.send_json(500, {'error': 'save_failed'})
-        if not dup: threading.Thread(target=notify, args=(lid,), daemon=True).start()
+        if not dup: notifier.deliver_async(lid)
         self.send_json(200 if dup else 201, {'ok': True, 'lead_id': lid, 'duplicate': dup})
 
     def upload(self, n):
         if n <= 0: return self.send_json(400, {'error': 'empty'})
         if n > MAX_FILE: return self.send_json(413, {'error': 'too_large', 'message': 'Файл больше %d МБ' % LIM['max_file_mb']})
         if not rate_ok(self.ip(), 'upload', 40): return self.send_json(429, {'error': 'rate_limited', 'message': 'Слишком много загрузок. Попробуйте позже.'})
+        if notifier.used_bytes() + n > QUOTA or shutil.disk_usage(DATA).free - n < MIN_FREE:
+            return self.send_json(507, {'error': 'storage_full', 'message': 'Загрузка файлов сейчас недоступна. Отправьте заявку без файлов: их можно показать при разговоре.'})
         body = self.rfile.read(n)
         mime = sniff(body[:16])
         if mime not in LIM['file_types']: return self.send_json(415, {'error': 'bad_type', 'message': 'Допустимы JPG, PNG, WebP и PDF'})
@@ -371,7 +370,7 @@ class H(http.server.SimpleHTTPRequestHandler):
     def rows(self):
         with db_lock:
             leads = [dict(r) for r in db.execute('SELECT * FROM leads ORDER BY id DESC LIMIT 500')]
-            att = [dict(r) for r in db.execute('SELECT id,filename,mime,size,lead_id FROM attachments WHERE lead_id IS NOT NULL')]
+            att = [dict(r) for r in db.execute('SELECT id,filename,mime,size,lead_id,path IS NOT NULL AS on_disk,deleted_at FROM attachments WHERE lead_id IS NOT NULL')]
         for l in leads:
             l['payload'] = json.loads(l['payload']); l['files'] = [a for a in att if a['lead_id'] == l['id']]
         return leads
@@ -380,31 +379,65 @@ class H(http.server.SimpleHTTPRequestHandler):
         if not self.authed(q):
             b = '<meta charset=utf-8><body style="font:16px sans-serif;padding:40px">Нужен токен: /admin?token=...</body>'.encode()
             self.send_response(403); self.send_header('Content-Type', 'text/html; charset=utf-8'); self.send_header('Content-Length', str(len(b))); self.end_headers(); self.wfile.write(b); return
-        tok = urllib.parse.quote(ADMIN_TOKEN); cards = []
+        e = html.escape; tok = urllib.parse.quote(ADMIN_TOKEN)
+        # --- блок «Telegram»: получатели и ссылки для подписки
+        token_set = bool(notifier.token()); code = notifier.join_code(); chat = notifier.static_chat()
+        bot = notifier.bot_username() if token_set else None
+        subs = ''.join('<li>%s <span class="m">(%s)</span> <button onclick="act(\'/api/admin/subscribers/%s/remove\')">отключить</button></li>' % (
+            e(s['title'] or s['chat_id']), e(s['kind'] or ''), e(s['chat_id'])) for s in notifier.subscribers())
+        tg = ['<section class="tg"><h2>Telegram</h2>']
+        if not token_set:
+            tg.append('<p>Бот не подключён: задайте <code>TELEGRAM_BOT_TOKEN</code>. Сейчас уведомления пишутся в <code>outbox.log</code>, файлы хранятся %s сут.</p>' % e('%g' % float(os.environ.get('UNSENT_FILE_DAYS', 7))))
+        else:
+            tg.append('<p>Бот: %s%s</p>' % (('<b>@%s</b>' % e(bot)) if bot else 'проверка…', (' · общий чат: <code>%s</code>' % e(chat)) if chat else ''))
+            if code and bot:
+                tg.append('<p>Пригласить в личные сообщения: <a href="https://t.me/%s?start=%s">ссылка</a><br>Добавить бота в группу: <a href="https://t.me/%s?startgroup=%s">ссылка</a><br><span class="m">Ссылки содержат секретный код: отправляйте только сотрудникам. Либо командой <code>/join КОД</code>.</span></p>' % (e(bot), e(code), e(bot), e(code)))
+            elif not code:
+                tg.append('<p class="m">Чтобы подписчики подключались сами, задайте <code>TELEGRAM_JOIN_CODE</code> (секретный код).</p>')
+            tg.append('<p>Получатели: %s</p>' % ('<ul>%s</ul>' % subs if subs else ('нет подписчиков' + ('' if chat else ' и не задан общий чат: заявки ждут получателя'))))
+        tg.append('<p class="m">Временные файлы на диске: %.1f МБ из %.0f МБ (после отправки в Telegram удаляются).</p></section>' % (notifier.used_bytes() / 1048576, QUOTA / 1048576))
+        # --- карточки заявок
+        cards = []
+        card = ('<article id="lead-{id}"><header><b>№{id}</b> <span class="t">{created}</span><span class="tag">{kind}</span>'
+                '<select onchange="fetch(\'/api/admin/leads/{id}/status?token={tok}\',{{method:\'POST\',body:JSON.stringify({{status:this.value}})}})">{opts}</select></header>'
+                '<p class="s">{summary}</p><p><b>{name}</b> · <a href="tel:{phone}">{phone}</a> · {channel}{pref}</p><p class="f">{files}</p>'
+                '<p class="m">Источник: {page} {project} · {delivery}</p></article>')
         for l in self.rows():
             c = l['payload']['customer']; src = l['payload'].get('source') or {}
-            files = ''.join('<a href="/api/files/%s?token=%s" target="_blank">%s</a>' % (f['id'], tok, html.escape(f['filename'] or 'файл')) for f in l['files']) or '<i>файлов нет</i>'
+            fl = []
+            for f in l['files']:
+                if f['on_disk']:
+                    fl.append('<a href="/api/files/%s?token=%s" target="_blank">%s</a>' % (f['id'], tok, e(f['filename'] or 'файл')))
+                else:
+                    fl.append('<span class="gone">%s: %s</span>' % (e(f['filename'] or 'файл'), 'отправлен в Telegram и удалён с сервера' if l['notified'] else 'удалён с сервера, не отправлен'))
             opts = ''.join('<option value="%s"%s>%s</option>' % (k, ' selected' if k == l['status'] else '', v) for k, v in SCHEMA['status'].items())
-            cards.append('''<article id="lead-%d"><header><b>№%d</b> <span class="t">%s</span><span class="tag">%s</span>
-<select onchange="fetch('/api/admin/leads/%d/status?token=%s',{method:'POST',body:JSON.stringify({status:this.value})})">%s</select></header>
-<p class="s">%s</p><p><b>%s</b> · <a href="tel:%s">%s</a> · %s%s</p><p class="f">%s</p><p class="m">Источник: %s %s · уведомление: %s</p></article>''' % (
-                l['id'], l['id'], l['created_at'].replace('T', ' ')[:16], 'быстрая' if l['lead_type'] == 'quick' else 'проект', l['id'], tok, opts,
-                html.escape(l['summary']), html.escape(c.get('name') or '—'), c['phone'], c['phone'],
-                html.escape(lab('channel', c.get('preferred_channel')) if c.get('preferred_channel') else 'способ не указан'),
-                (' · удобно: ' + html.escape(c['preferred_time'])) if c.get('preferred_time') else '', files,
-                html.escape(str(src.get('page') or '—')), html.escape(str(src.get('project_id') or '')),
-                'доставлено' if l['notified'] else 'НЕ доставлено (%s)' % html.escape(l['notify_error'] or 'ожидает')))
-        page = '''<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Заявки JAQAIYM</title>
-<style>body{font:15px/1.5 system-ui,sans-serif;background:#f5efe3;color:#2e1a10;margin:0;padding:24px;max-width:860px;margin:auto}
-h1{font-size:22px}article{background:#fff;border-radius:14px;padding:18px 20px;margin:14px 0;box-shadow:0 1px 0 #0001}article:target{outline:2px solid #b65c37}
-header{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.t{color:#8a7a6c}.tag{background:#eadfce;border-radius:99px;padding:2px 10px;font-size:12px}select{margin-left:auto;padding:6px}
-.s{font-size:16px}.f a{display:inline-block;margin:0 10px 6px 0;background:#f5efe3;padding:4px 10px;border-radius:8px;color:#2e1a10}.m{color:#8a7a6c;font-size:13px}</style>
-<h1>Заявки (%d)</h1>%s''' % (len(cards), ''.join(cards) or '<p>Заявок пока нет.</p>')
-        b = page.encode(); self.send_response(200); self.send_header('Content-Type', 'text/html; charset=utf-8'); self.send_header('Content-Length', str(len(b))); self.end_headers(); self.wfile.write(b)
+            if l['notified']:
+                dl = 'доставлено в Telegram' if l['notified_via'] == 'telegram' else 'записано в outbox.log (тест, без Telegram)'
+            else:
+                dl = 'НЕ доставлено: %s · попыток: %d%s <button onclick="act(\'/api/admin/leads/%d/resend\')">повторить отправку</button>' % (
+                    e(l['notify_error'] or 'ожидает отправки'), l['notify_attempts'],
+                    (', следующая после %s UTC' % e(l['next_attempt_at'].replace('T', ' ')[:16])) if l['next_attempt_at'] else '', l['id'])
+            cards.append(card.format(
+                id=l['id'], created=l['created_at'].replace('T', ' ')[:16], kind='быстрая' if l['lead_type'] == 'quick' else 'проект', tok=tok, opts=opts,
+                summary=e(l['summary']), name=e(c.get('name') or '—'), phone=e(c['phone']),
+                channel=e(lab('channel', c.get('preferred_channel')) if c.get('preferred_channel') else 'способ не указан'),
+                pref=(' · удобно: ' + e(c['preferred_time'])) if c.get('preferred_time') else '',
+                files=''.join(fl) or '<i>файлов нет</i>', page=e(str(src.get('page') or '—')), project=e(str(src.get('project_id') or '')), delivery=dl))
+        css = ('body{font:15px/1.5 system-ui,sans-serif;background:#f5efe3;color:#2e1a10;margin:0;padding:24px;max-width:860px;margin:auto}'
+               'h1{font-size:22px}h2{font-size:17px;margin:0 0 8px}article,.tg{background:#fff;border-radius:14px;padding:18px 20px;margin:14px 0;box-shadow:0 1px 0 #0001}'
+               'article:target{outline:2px solid #b65c37}header{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.t{color:#8a7a6c}'
+               '.tag{background:#eadfce;border-radius:99px;padding:2px 10px;font-size:12px}select{margin-left:auto;padding:6px}.s{font-size:16px}'
+               '.f a,.f .gone{display:inline-block;margin:0 10px 6px 0;background:#f5efe3;padding:4px 10px;border-radius:8px;color:#2e1a10}.f .gone{color:#8a7a6c}'
+               '.m{color:#8a7a6c;font-size:13px}code{background:#f5efe3;padding:1px 5px;border-radius:5px}button{cursor:pointer;margin-left:6px}ul{margin:6px 0;padding-left:20px}')
+        js = "function act(u){fetch(u+'?token=" + tok + "',{method:'POST'}).then(function(){location.reload()})}"
+        page = ('<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Заявки JAQAIYM</title><style>' + css + '</style>'
+                '<script>' + js + '</script><h1>Заявки (' + str(len(cards)) + ')</h1>' + ''.join(tg) + (''.join(cards) or '<p>Заявок пока нет.</p>'))
+        out = page.encode(); self.send_response(200); self.send_header('Content-Type', 'text/html; charset=utf-8'); self.send_header('Content-Length', str(len(out))); self.end_headers(); self.wfile.write(out)
 
 class S(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True; allow_reuse_address = True
 
 if __name__ == '__main__':
+    notifier.start(UPLOADS)
     print('JAQAIYM: http://localhost:%d   админка: http://localhost:%d/admin?token=%s' % (PORT, PORT, ADMIN_TOKEN), flush=True)
     S(('', PORT), H).serve_forever()

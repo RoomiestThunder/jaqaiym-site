@@ -374,13 +374,15 @@
       if (r.status === 422 && r.data.errors) {
         sendError = t('e.validation', { v: Object.values(r.data.errors).join(' ') });
         JQ.track('request_failed', { type: 'validation' });
-      } else { sendError = r.data.message || t('e.server'); JQ.track('request_failed', { type: CFG.demo ? 'demo' : 'server_' + r.status }); }
+      } else { sendError = CFG.demo ? r.data.message : (r.status === 429 ? t('e.api.lead_rate') : t('e.server')); JQ.track('request_failed', { type: CFG.demo ? 'demo' : 'server_' + r.status }); }
     } catch (_) { sendError = t('e.network'); JQ.track('request_failed', { type: 'network' }); }
     busy = false; render(); const s = $('#sendErr'); if (s) s.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
   // ---------------- файлы ----------------
   const uploading = {}; let fk = 0;
+  // тексты ошибок сервера берём из словаря языка, а не из ответа (он на русском)
+  const apiMsg = d => { const k = 'e.api.' + (d && d.error); return (window.I18N && window.I18N[k]) ? t(k, { mb: S.limits.max_file_mb }) : ((d && d.message) || t('e.upload')); };
   function patchFile(f) { const el = $(`.fl[data-k="${f.key}"]`); if (el) el.outerHTML = fileCard(f); }
   function addFiles(list) {
     const Lm = S.limits; let note = null;
@@ -408,7 +410,7 @@
     x.onload = () => {
       let d = {}; try { d = JSON.parse(x.responseText); } catch (_) {}
       if (x.status === 201 && d.id) { e.id = d.id; e.status = 'ok'; e.mime = d.mime || e.mime; delete uploading[e.key]; patchFile(e); save(); }
-      else fail(d.message || t('e.upload'));
+      else fail(apiMsg(d));
     };
     x.onerror = () => fail(t('e.offline'));
     x.send(e.file);

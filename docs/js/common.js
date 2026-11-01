@@ -128,7 +128,7 @@
         } else if (r.status === 422 && r.data.errors) {
           if (r.data.errors['customer.phone']) phone.closest('.field').classList.add('err');
           err.textContent = t('qm.phone.err'); err.classList.add('on');
-        } else { err.textContent = r.data.message || t('qm.err.generic'); err.classList.add('on'); }
+        } else { err.textContent = CFG.demo ? r.data.message : (r.status === 429 ? t('e.api.lead_rate') : t('qm.err.generic')); err.classList.add('on'); }
       } catch (_) { err.textContent = t('qm.err.net'); err.classList.add('on'); JQ.track('request_failed', { type: 'network', lead: 'quick' }); }
       btn.disabled = false; btn.textContent = t('qm.submit');
     });
