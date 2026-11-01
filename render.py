@@ -27,7 +27,7 @@ def render_page(public_dir, fname, lang, route, root='', api='', demo=False, noi
            'policyVersion': site['policy_version'], 'policyUrl': base + '/privacy.html', 'base': base, 'root': root, 'api': api, 'demo': demo}
     boot = '<script>window.JQ_LANG=%s;window.JQ_CONFIG=%s;window.I18N=%s;</script>' % (
         json.dumps(lang), json.dumps(cfg, ensure_ascii=False), json.dumps(i18n, ensure_ascii=False).replace('</', '<\\/'))
-    special = {'base': base, 'lang': lang, 'alt_href': alt, 'boot': boot, 'phone': site['phone_display'], 'phone_tel': site['phone_tel'], 'wa': site['whatsapp'],
+    special = {'base': base, 'lang': lang, 'alt_href': alt, 'boot': boot, 'phone': site['phone_display'], 'phone_tel': site['phone_tel'], 'wa': site['whatsapp'], 'email': site.get('email', ''),
                'og_locale': 'kk_KZ' if lang == 'kk' else 'ru_RU', 'alt_lang': 'ru' if lang == 'kk' else 'kk'}
 
     def sub(m):
