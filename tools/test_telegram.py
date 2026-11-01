@@ -87,7 +87,7 @@ class Srv:
     def __init__(self, port, **env):
         self.port, self.dir = port, tempfile.mkdtemp(prefix='jq-test-')
         e = dict(os.environ, DATA_DIR=self.dir, ADMIN_TOKEN='admintest', TELEGRAM_API_BASE='http://127.0.0.1:8132', TG_RETRY_BASE_SECONDS='1', TG_RETRY_TICK_SECONDS='0.5',
-                 CLEANUP_TICK_SECONDS='1', ORPHAN_HOURS='0.0008', TG_POLL_TIMEOUT='1', MIN_FREE_MB='1', UPLOAD_QUOTA_MB='0.2')
+                 CLEANUP_TICK_SECONDS='1', JQ_NO_DOTENV='1', ORPHAN_HOURS='0.0008', TG_POLL_TIMEOUT='1', MIN_FREE_MB='1', UPLOAD_QUOTA_MB='0.2')
         for k in ('TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'TELEGRAM_JOIN_CODE'): e.pop(k, None)
         e.update({k: v for k, v in env.items() if v is not None})
         self.p = subprocess.Popen([sys.executable, os.path.join(ROOT, 'server.py'), str(port)], env=e, stdout=subprocess.DEVNULL, stderr=open(os.path.join(self.dir, 'err.log'), 'w'))
@@ -168,6 +168,14 @@ def main():
         check(all(r['deleted_at'] for r in S.sql('SELECT deleted_at FROM attachments')), 'в базе файлы помечены удалёнными')
         st, page = 200, urllib.request.urlopen('http://127.0.0.1:8133/admin?token=admintest').read().decode()
         check('отправлен в Telegram и удалён с сервера' in page and 'доставлено в Telegram' in page and 'jq_test_bot' in page, 'админка показывает доставку, удалённые файлы и бота')
+
+        print('A2. CORS: страница с github.io может слать заявки')
+        def opt(origin):
+            r = urllib.request.Request('http://127.0.0.1:8133/api/leads', method='OPTIONS', headers={'Origin': origin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type'})
+            with urllib.request.urlopen(r, timeout=5) as x: return x.status, x.headers
+        st, h = opt('https://roomiestthunder.github.io')
+        check(st == 204 and h.get('Access-Control-Allow-Origin') == 'https://roomiestthunder.github.io' and 'Content-Type' in h.get('Access-Control-Allow-Headers', ''), 'предзапрос с github.io разрешён')
+        check('Access-Control-Allow-Origin' not in opt('https://evil.example')[1], 'чужой адрес не получает разрешения')
 
         print('B. подписчики и частичный сбой')
         join(222, '/join@jq_test_bot secret123'); join(-1003, '/join secret123', 'supergroup', 'Команда'); join(444, '/join wrong')

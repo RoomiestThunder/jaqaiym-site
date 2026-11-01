@@ -210,3 +210,6 @@ textarea.inp{resize:vertical;min-height:90px}
 .legal .draft{margin:0 0 16px;padding:10px 12px;background:#fff4d6;font-size:16px}
 .doc .back{margin-top:32px}
 .doc .back a{text-decoration:underline;text-underline-offset:3px}
+
+/* пометка тестового подключения к серверу (только демо-версия со ссылкой ?api=) */
+.testbar{position:fixed;left:12px;bottom:12px;z-index:90;max-width:60vw;background:#fff4d6;color:#6b5320;font-size:12px;line-height:1.35;padding:6px 10px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.15)}

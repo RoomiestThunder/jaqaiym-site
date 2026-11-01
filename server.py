@@ -2,7 +2,7 @@
 """JAQAIYM: статика + приём заявок (прототип этапа 3 из ТЗ).
 
 Запуск:  python3 server.py [порт]        (по умолчанию 8123)
-Переменные окружения (все необязательны):
+Переменные окружения (все необязательны; локально их можно положить в файл .env рядом с server.py, он в .gitignore):
   ADMIN_TOKEN          токен для /admin (иначе генерируется и хранится в data/admin_token.txt)
   DATA_DIR             папка для базы и файлов (по умолчанию ./data; на хостинге — смонтированный том)
   PORT                 порт (хостинги задают его сами)
@@ -10,6 +10,7 @@
   TELEGRAM_CHAT_ID     id общего чата команды; у группы он отрицательный, вида -100…  (найти: tools/telegram_setup.py)
   TELEGRAM_JOIN_CODE   секретный код: кто отправит боту /join КОД (или откроет ссылку из админки), тот подписывается на заявки
   PUBLIC_BASE_URL      адрес сайта для ссылок в уведомлениях, например https://jaqaiym.kz
+  CORS_ORIGINS         с каких адресов страницы могут слать заявки на этот сервер (через запятую; по умолчанию github.io и jaqaiym.kz)
   UPLOAD_QUOTA_MB      сколько МБ временных файлов можно держать на диске (по умолчанию 500; диск 1 ГБ)
   MIN_FREE_MB          при меньшем свободном месте загрузка файлов отключается (по умолчанию 150)
 
@@ -23,6 +24,23 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from datetime import datetime, timezone
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
+
+
+def _load_dotenv(path):
+    """Читает KEY=значение из файла .env (если он есть). Уже заданные переменные окружения не перезаписываются."""
+    if os.environ.get('JQ_NO_DOTENV') or not os.path.isfile(path):
+        return
+    for line in open(path, encoding='utf-8'):
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        k, v = k.strip(), v.strip().strip('"\'')
+        if k and k not in os.environ:
+            os.environ[k] = v
+
+
+_load_dotenv(os.path.join(ROOT, '.env'))
 PUBLIC = os.path.join(ROOT, 'public')
 DATA = os.environ.get('DATA_DIR') or os.path.join(ROOT, 'data')   # на хостинге укажите путь к постоянному тому
 UPLOADS = os.path.join(DATA, 'uploads')
@@ -66,6 +84,7 @@ for _t, _c, _d in (('leads', 'tg_targets', 'TEXT'), ('leads', 'next_attempt_at',
         db.execute('ALTER TABLE %s ADD COLUMN %s %s' % (_t, _c, _d))
 db.commit()
 
+CORS = [o.strip().rstrip('/') for o in os.environ.get('CORS_ORIGINS', 'https://roomiestthunder.github.io,https://jaqaiym.kz,https://www.jaqaiym.kz').split(',') if o.strip()]
 QUOTA = int(float(os.environ.get('UPLOAD_QUOTA_MB', 500)) * 1048576)
 MIN_FREE = int(float(os.environ.get('MIN_FREE_MB', 150)) * 1048576)
 
@@ -274,7 +293,15 @@ class H(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('X-Content-Type-Options', 'nosniff'); self.send_header('Referrer-Policy', 'same-origin')
         if self.path.startswith('/api') or self.path.startswith('/admin'): self.send_header('Cache-Control', 'no-store')
+        origin = (self.headers.get('Origin') or '').rstrip('/')
+        if self.path.startswith('/api') and origin in CORS:      # страница на другом адресе (GitHub Pages) может обращаться к API
+            self.send_header('Access-Control-Allow-Origin', origin); self.send_header('Vary', 'Origin')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-File-Name')
+            self.send_header('Access-Control-Max-Age', '600')
         super().end_headers()
+
+    def do_OPTIONS(self):                      # предзапрос браузера (CORS)
+        self.send_response(204); self.send_header('Content-Length', '0'); self.end_headers()
 
     def send_json(self, code, obj):
         b = json.dumps(obj, ensure_ascii=False).encode()

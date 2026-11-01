@@ -6,6 +6,25 @@
   const JQ = (window.JQ = window.JQ || {});
   JQ.lang = window.JQ_LANG || 'ru';
 
+  // Тестовое подключение демо-версии к серверу заявок: откройте страницу со ссылкой ?api=https://адрес-сервера
+  // (?api=off отключает). Только в демо-режиме и только на время вкладки; публичные посетители видят обычное демо.
+  if (CFG.demo) {
+    try {
+      const q = new URLSearchParams(location.search).get('api');
+      if (q === 'off') sessionStorage.removeItem('jq_api');
+      else if (q) sessionStorage.setItem('jq_api', q.replace(/\/+$/, ''));
+      const a = sessionStorage.getItem('jq_api');
+      if (a && /^(https:\/\/[a-z0-9.-]+|http:\/\/localhost)(:\d+)?$/i.test(a)) {
+        CFG.api = a; CFG.demo = false; CFG.testApi = a;
+        document.addEventListener('DOMContentLoaded', () => {
+          const b = document.createElement('div'); b.className = 'testbar';
+          b.textContent = 'Тестовый режим: заявки уходят на ' + a.replace(/^https?:\/\//, '');
+          document.body.appendChild(b);
+        });
+      }
+    } catch (_) {}
+  }
+
   // перевод строки по ключу; {n}, {v}… подставляются из vars
   JQ.t = function (key, vars) {
     let s = (window.I18N || {})[key];
