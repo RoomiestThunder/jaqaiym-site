@@ -121,42 +121,45 @@ def lab(group, key):
     return SCHEMA.get(group, {}).get(key, key)
 
 def make_summary(p):
-    """Короткая карточка для команды: без кодов и технических полей."""
+    """Карточка заявки для команды: одно поле в строке, без кодов и технических деталей."""
+    lines = []
+    def add(label, value):
+        if value not in (None, '', []):
+            lines.append('%s: %s' % (label, value))
+    low = lambda group, keys: ', '.join(lab(group, k).lower() for k in (keys or []))
     if p['lead_type'] == 'quick':
-        q = p.get('quick', {})
-        s = 'Быстрая заявка: %s' % lab('quick_type', q.get('request_type'))
-        if q.get('message'): s += '; сообщение: %s' % q['message'][:300]
-        return s
-    pr = p['project']; f = pr.get('features', {}) or {}; parts = [lab('category', pr['category'])]
-    if pr.get('premise'): parts.append(lab('premise', pr['premise']).lower())
-    parts.append(lab('city', pr.get('city')))
-    if pr.get('layout'): parts.append(lab('kitchen_layout', pr['layout']).lower())
-    if pr.get('wardrobe_kind'): parts.append(lab('wardrobe_kind', pr['wardrobe_kind']).lower())
-    if pr.get('business_scope'): parts.append(lab('business_scope', pr['business_scope']).lower())
-    if pr.get('style_preferences'): parts.append('стиль: ' + ', '.join(lab('style', s).lower() for s in pr['style_preferences']))
-    if pr['category'] == 'kitchen':
-        for k, t in (('upper_cabinets', 'верхние шкафы'), ('island', 'остров'), ('built_in_appliances', 'встроенная техника')):
-            v = f.get(k)
-            if v == 'yes': parts.append(t)
-            elif v == 'no': parts.append('без: ' + t)
-    if f.get('door_type'): parts.append('двери: ' + ', '.join(lab('doors', x).lower() for x in f['door_type']))
-    if f.get('storage_priorities'): parts.append('важно: ' + ', '.join(lab('storage', x).lower() for x in f['storage_priorities']))
-    if f.get('purposes'): parts.append('назначение: ' + ', '.join(lab('purpose', x).lower() for x in f['purposes']))
-    if f.get('object_type'): parts.append('объект: ' + f['object_type'])
-    if f.get('task'): parts.append('задача: ' + f['task'])
-    if f.get('quantity'): parts.append('количество: ' + f['quantity'])
+        q = p.get('quick') or {}
+        add('Тип обращения', lab('quick_type', q.get('request_type')))
+        add('Сообщение', (q.get('message') or '')[:500])
+        return '\n'.join(lines)
+    pr = p['project']; f = pr.get('features') or {}; cat = pr['category']
+    add('Заказ', lab('category', cat))
+    add('Помещение', lab('premise', pr['premise']) if pr.get('premise') else None)
+    add('Город', lab('city', pr.get('city')))
+    add('Планировка кухни', lab('kitchen_layout', pr['layout']) if pr.get('layout') else None)
+    add('Тип шкафа', lab('wardrobe_kind', pr['wardrobe_kind']) if pr.get('wardrobe_kind') else None)
+    add('Объекты', lab('business_scope', pr['business_scope']) if pr.get('business_scope') else None)
+    add('Стиль', low('style', pr.get('style_preferences')))
+    add('Комментарий к стилю', pr.get('style_note'))
+    if cat == 'kitchen':
+        for key, label in (('upper_cabinets', 'Верхние шкафы'), ('island', 'Остров'), ('built_in_appliances', 'Встроенная техника')):
+            add(label, lab('yes_no', f[key]).lower() if f.get(key) else None)
+    add('Двери', low('doors', f.get('door_type')))
+    add('Что хранить', low('storage', f.get('storage_priorities')))
+    add('Назначение', low('purpose', f.get('purposes')))
+    add('Объект', f.get('object_type'))
+    add('Задача', f.get('task'))
+    add('Количество', f.get('quantity'))
     dm = pr.get('dimensions_mm')
     if pr.get('dimensions_known') and dm:
         names = {'a': 'A', 'b': 'B', 'c': 'C', 'width': 'ширина', 'height': 'высота', 'depth': 'глубина'}
-        parts.append('размеры, см: ' + ', '.join('%s %s' % (names.get(k, k), round(v / 10)) for k, v in dm.items() if v))
-    else:
-        parts.append('размеры неизвестны, нужен замер')
-    n = len(pr.get('attachment_ids') or [])
-    parts.append('фото/файлы: %d' % n if n else 'файлы не приложены')
-    if pr.get('budget_range'): parts.append('бюджет: ' + lab('budget', pr['budget_range']))
-    if pr.get('timeframe'): parts.append('срок: ' + lab('timeframe', pr['timeframe']).lower())
-    if pr.get('description'): parts.append('примечание: ' + pr['description'][:500])
-    return '; '.join(parts)
+        add('Размеры, см', ', '.join('%s %s' % (names.get(k, k), round(v / 10)) for k, v in dm.items() if v))
+    elif cat not in ('business', 'other'):
+        add('Размеры', 'неизвестны, нужен замер')
+    add('Бюджет', lab('budget', pr['budget_range']) if pr.get('budget_range') else None)
+    add('Срок', lab('timeframe', pr['timeframe']).lower() if pr.get('timeframe') else None)
+    add('Примечание', (pr.get('description') or '')[:500])
+    return '\n'.join(lines)
 
 def validate(d):
     """Возвращает (ошибки, нормализованный payload)."""
@@ -272,15 +275,25 @@ def create_lead(clean):
 
 # ---------------- уведомления (Telegram) ----------------
 def lead_text(r, nfiles):
-    """Текст карточки заявки для команды."""
-    p = json.loads(r['payload']); c = p['customer']
-    head = 'Новая заявка №%d (%s)' % (r['id'], 'быстрая' if r['lead_type'] == 'quick' else 'проект')
-    text = '%s\n%s\n\nКонтакт: %s %s (%s)\nИсточник: %s\nКарточка: %s/admin?token=%s#lead-%d' % (
-        head, r['summary'], c.get('name') or '—', c['phone'], lab('channel', c.get('preferred_channel')) if c.get('preferred_channel') else 'способ не указан',
-        (p.get('source') or {}).get('page') or '—', BASE_URL, ADMIN_TOKEN, r['id'])
-    if nfiles:
-        text += '\nФайлы: %d (придут следом в этот чат)' % nfiles
-    return text
+    """Текст заявки для команды: блоки через пустую строку, каждое поле с новой строки."""
+    p = json.loads(r['payload']); c = p['customer']; src = p.get('source') or {}
+    kind = 'быстрая' if r['lead_type'] == 'quick' else 'проект'
+    contact = []
+    for label, value in (('Клиент', c.get('name') or '—'), ('Телефон', c['phone']),
+                         ('Связаться', lab('channel', c.get('preferred_channel')) if c.get('preferred_channel') else None),
+                         ('Удобное время', c.get('preferred_time')), ('Email', c.get('email')),
+                         ('Компания', c.get('company')), ('Роль', lab('role', c['role']) if c.get('role') else None)):
+        if value:
+            contact.append('%s: %s' % (label, value))
+    where = []
+    if src.get('page'): where.append('Страница: %s' % src['page'])
+    if src.get('project_id'): where.append('Понравился проект: %s' % src['project_id'])
+    blocks = ['Новая заявка №%d (%s)' % (r['id'], kind), make_summary(p), '\n'.join(contact)]
+    if r['lead_type'] != 'quick':
+        blocks.append('Файлы: %d (придут следом в этот чат)' % nfiles if nfiles else 'Файлы: не приложены')
+    if where: blocks.append('\n'.join(where))
+    blocks.append('Карточка: %s/admin?token=%s#lead-%d' % (BASE_URL, ADMIN_TOKEN, r['id']))
+    return '\n\n'.join(b for b in blocks if b)
 
 from notifier import Notifier
 notifier = Notifier(db, db_lock, lead_text)
@@ -446,14 +459,14 @@ class H(http.server.SimpleHTTPRequestHandler):
                     (', следующая после %s UTC' % e(l['next_attempt_at'].replace('T', ' ')[:16])) if l['next_attempt_at'] else '', l['id'])
             cards.append(card.format(
                 id=l['id'], created=l['created_at'].replace('T', ' ')[:16], kind='быстрая' if l['lead_type'] == 'quick' else 'проект', tok=tok, opts=opts,
-                summary=e(l['summary']), name=e(c.get('name') or '—'), phone=e(c['phone']),
+                summary=e(make_summary(l['payload'])), name=e(c.get('name') or '—'), phone=e(c['phone']),
                 channel=e(lab('channel', c.get('preferred_channel')) if c.get('preferred_channel') else 'способ не указан'),
                 pref=(' · удобно: ' + e(c['preferred_time'])) if c.get('preferred_time') else '',
                 files=''.join(fl) or '<i>файлов нет</i>', page=e(str(src.get('page') or '—')), project=e(str(src.get('project_id') or '')), delivery=dl))
         css = ('body{font:15px/1.5 system-ui,sans-serif;background:#f5efe3;color:#2e1a10;margin:0;padding:24px;max-width:860px;margin:auto}'
                'h1{font-size:22px}h2{font-size:17px;margin:0 0 8px}article,.tg{background:#fff;border-radius:14px;padding:18px 20px;margin:14px 0;box-shadow:0 1px 0 #0001}'
                'article:target{outline:2px solid #b65c37}header{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.t{color:#8a7a6c}'
-               '.tag{background:#eadfce;border-radius:99px;padding:2px 10px;font-size:12px}select{margin-left:auto;padding:6px}.s{font-size:16px}'
+               '.tag{background:#eadfce;border-radius:99px;padding:2px 10px;font-size:12px}select{margin-left:auto;padding:6px}.s{font-size:16px;white-space:pre-line}'
                '.f a,.f .gone{display:inline-block;margin:0 10px 6px 0;background:#f5efe3;padding:4px 10px;border-radius:8px;color:#2e1a10}.f .gone{color:#8a7a6c}'
                '.m{color:#8a7a6c;font-size:13px}code{background:#f5efe3;padding:1px 5px;border-radius:5px}button{cursor:pointer;margin-left:6px}ul{margin:6px 0;padding-left:20px}')
         js = "function act(u){fetch(u+'?token=" + tok + "',{method:'POST'}).then(function(){location.reload()})}"
