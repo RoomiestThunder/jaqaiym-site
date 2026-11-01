@@ -33,6 +33,6 @@ for lang in ('ru', 'kk'):
 
 open(os.path.join(out, '.nojekyll'), 'w').close()
 open(os.path.join(out, '404.html'), 'w', encoding='utf-8').write(
-    '<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><title>JAQAIYM</title><meta http-equiv="refresh" content="0;url=%s/"><a href="%s/">JAQAIYM</a>' % (root, root))
+    '<!doctype html><meta charset="utf-8"><meta name="color-scheme" content="only light"><meta name="robots" content="noindex"><title>JAQAIYM</title><meta http-equiv="refresh" content="0;url=%s/"><a href="%s/">JAQAIYM</a>' % (root, root))
 size = sum(os.path.getsize(os.path.join(dp, f)) for dp, _, fs in os.walk(out) for f in fs)
 print('готово: %s (%.1f МБ), префикс %r' % (out, size / 1e6, root))
