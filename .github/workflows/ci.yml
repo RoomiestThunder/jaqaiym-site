@@ -21,23 +21,5 @@ jobs:
           sudo apt-get install -y php-cli php-sqlite3 php-curl php-mbstring
           php -v
 
-      - name: Синтаксис PHP, Python и JavaScript
-        run: |
-          find php -name '*.php' -print0 | xargs -0 -n1 php -l
-          python3 -m py_compile server.py notifier.py render.py tools/*.py
-          node --check public/js/common.js
-          node --check public/js/wizard.js
-
-      - name: Тексты (i18n) собраны из актуальных исходников
-        run: |
-          python3 tools/gen_i18n.py
-          git diff --exit-code public/i18n
-
-      - name: Тесты PHP-версии (приём, Telegram, повторы, очистка, правила схемы)
-        run: python3 tools/test_php.py
-
-      - name: Тесты безопасности PHP-версии
-        run: python3 tools/test_php_security.py
-
-      - name: Тесты версии на Python
-        run: python3 tools/test_telegram.py
+      - name: Все проверки проекта (tools/check.sh: синтаксис, тексты, три набора тестов)
+        run: bash tools/check.sh

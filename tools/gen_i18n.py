@@ -347,6 +347,9 @@ KK_SCHEMA = {
     'quick_type': {'question': 'Сұрақ қою', 'measure': 'Өлшеуге тапсырыс беру', 'discuss': 'Жобаны талқылау'},
 }
 
+# разделы schema.json, где не подписи ответов для клиента, а лимиты, правила проверки и статусы админки (только по-русски)
+NOT_LABEL_GROUPS = ('limits', 'required', 'status')
+
 def main():
     ru = {k: v[0] for k, v in T.items()}
     kk = {k: v[1] for k, v in T.items()}
@@ -358,7 +361,7 @@ def main():
     # проверка: словарь kk покрывает все ключи schema.json
     sch = json.load(open(os.path.join(ROOT, 'public', 'schema.json'), encoding='utf-8'))
     for g, d in sch.items():
-        if isinstance(d, dict) and g not in ('limits',) and not g.startswith('_') and g != 'status':
+        if isinstance(d, dict) and g not in NOT_LABEL_GROUPS and not g.startswith('_'):
             for code in d:
                 if code.startswith('_'): continue
                 assert code in KK_SCHEMA.get(g, {}), 'нет казахского перевода: %s.%s' % (g, code)
