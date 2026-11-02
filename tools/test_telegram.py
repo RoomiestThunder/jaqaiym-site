@@ -30,6 +30,7 @@ def check(cond, label):
 # ---------------- подставной Telegram ----------------
 class Mock(BaseHTTPRequestHandler):
     log, fail, updates, lock, n = [], {}, [], threading.Lock(), [0]
+    webhook = {}                                              # то, что передали в setWebhook
 
     def log_message(self, *a): pass
 
@@ -60,6 +61,10 @@ class Mock(BaseHTTPRequestHandler):
             return self.reply(200, {'ok': True, 'result': ups})
         if method == 'getMe': return self.reply(200, {'ok': True, 'result': {'username': 'jq_test_bot'}})
         if method == 'deleteWebhook': return self.reply(200, {'ok': True, 'result': True})
+        if method == 'setWebhook':
+            Mock.webhook = fields; return self.reply(200, {'ok': True, 'result': True})
+        if method == 'getWebhookInfo':
+            return self.reply(200, {'ok': True, 'result': {'url': Mock.webhook.get('url', ''), 'pending_update_count': 0}})
         chat = str(fields.get('chat_id'))
         caption = fields.get('caption') or fields.get('text') or ''
         if method == 'sendMediaGroup':

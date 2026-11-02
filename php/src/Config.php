@@ -1,0 +1,93 @@
+<?php
+declare(strict_types=1);
+
+namespace Jq;
+
+/** Все настройки приложения в одном неизменяемом объекте. */
+final class Config
+{
+    public const MIN_ADMIN_SECRET = 16;
+
+    /** @param list<string> $corsOrigins */
+    public function __construct(
+        public readonly string $privateDir,
+        public readonly string $publicDir,
+        public readonly string $dataDir,
+        public readonly string $uploadsDir,
+        public readonly string $baseUrl,
+        public readonly string $adminSecret,
+        public readonly string $botToken,
+        public readonly string $chatId,
+        public readonly string $joinCode,
+        public readonly string $apiBase,
+        public readonly string $webhookSecret,
+        public readonly array $corsOrigins,
+        public readonly int $quotaBytes,
+        public readonly int $minFreeBytes,
+        public readonly int $maxAttempts,
+        public readonly int $retentionDays,
+        public readonly int $rateLeads,
+        public readonly int $rateUploads,
+        public readonly float $retryBase,
+        public readonly float $orphanHours,
+        public readonly float $unsentDays,
+    ) {
+    }
+
+    public static function load(string $privateDir, string $publicDir): self
+    {
+        $env = Env::fromFile($privateDir . '/config.env');
+        $data = rtrim($env->str('DATA_DIR', $privateDir . '/data'), '/');
+        $admin = $env->str('ADMIN_TOKEN');
+        $bot = $env->str('TELEGRAM_BOT_TOKEN');
+        $cors = array_values(array_filter(array_map(
+            static fn(string $o): string => rtrim(trim($o), '/'),
+            explode(',', $env->str('CORS_ORIGINS')),
+        )));
+        $webhook = $env->str('TG_WEBHOOK_SECRET');
+        if ($webhook === '' && $bot !== '') {
+            $webhook = substr(hash_hmac('sha256', 'tg-webhook', $bot . '|' . $admin), 0, 48);
+        }
+        return new self(
+            $privateDir, $publicDir, $data, $data . '/uploads',
+            rtrim($env->str('PUBLIC_BASE_URL', 'http://localhost:8123'), '/'),
+            $admin, $bot, trim($env->str('TELEGRAM_CHAT_ID')), trim($env->str('TELEGRAM_JOIN_CODE')),
+            rtrim($env->str('TELEGRAM_API_BASE', 'https://api.telegram.org'), '/'),
+            $webhook, $cors,
+            (int)($env->num('UPLOAD_QUOTA_MB', 500) * 1048576),
+            (int)($env->num('MIN_FREE_MB', 150) * 1048576),
+            (int)$env->num('TG_MAX_ATTEMPTS', 40),
+            (int)$env->num('RETENTION_DAYS', 365),
+            (int)$env->num('RATE_LEADS', 12),
+            (int)$env->num('RATE_UPLOADS', 40),
+            $env->num('TG_RETRY_BASE_SECONDS', 60),
+            $env->num('ORPHAN_HOURS', 24),
+            $env->num('UNSENT_FILE_DAYS', 7),
+        );
+    }
+
+    public function adminEnabled(): bool
+    {
+        return strlen($this->adminSecret) >= self::MIN_ADMIN_SECRET;
+    }
+
+    public function https(): bool
+    {
+        return str_starts_with($this->baseUrl, 'https://');
+    }
+
+    /** Ключ для подписи cookie админки и для хеширования IP: выводится из секретов, отдельно не хранится. */
+    public function key(string $purpose): string
+    {
+        return hash_hmac('sha256', $purpose, $this->adminSecret . '|' . $this->botToken);
+    }
+
+    public function ensureDirs(): void
+    {
+        foreach ([$this->dataDir, $this->uploadsDir, $this->dataDir . '/locks'] as $dir) {
+            if (!is_dir($dir) && !mkdir($dir, 0700, true) && !is_dir($dir)) {
+                throw new \RuntimeException('Не удалось создать папку данных');
+            }
+        }
+    }
+}
