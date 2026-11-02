@@ -23,3 +23,35 @@ jobs:
 
       - name: Все проверки проекта (tools/check.sh)
         run: bash tools/check.sh
+
+  # Выкладка на хостинг: только с ветки main и только после зелёных проверок.
+  # Задание собирает сайт и кладёт результат в ветку deploy; Plesk (Git, автоматический режим) забирает её по вебхуку.
+  # Секретов хостинга в GitHub нет: токен действует только на запись в этот репозиторий, на время задания.
+  deploy:
+    needs: tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Сборка для хостинга
+        env:
+          SITE_INDEXING: ${{ vars.SITE_INDEXING }}
+        run: |
+          # пока в настройках репозитория (Variables) не задано SITE_INDEXING=true, сайт закрыт от поисковиков
+          flags="--noindex"
+          if [ "$SITE_INDEXING" = "true" ]; then flags=""; fi
+          python3 tools/build_php.py $flags --out "$RUNNER_TEMP/dist"
+
+      - name: Публикация в ветку deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash tools/publish_deploy.sh "$RUNNER_TEMP/dist" \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" deploy "deploy ${GITHUB_SHA::7}"

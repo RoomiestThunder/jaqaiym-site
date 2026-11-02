@@ -10,6 +10,7 @@ find php -name '*.php' -print0 | xargs -0 -n1 php -l | { grep -v '^No syntax err
 python3 -m py_compile server.py notifier.py render.py tools/*.py
 node --check public/js/common.js
 node --check public/js/wizard.js
+bash -n tools/publish_deploy.sh
 
 echo "== Файлы workflow разбираются как YAML (иначе GitHub не запустит CI)"
 python3 - <<'PY'
@@ -33,6 +34,9 @@ python3 tools/test_php.py
 
 echo "== Тесты безопасности PHP-версии"
 python3 tools/test_php_security.py
+
+echo "== Публикация сборки в ветку deploy (автодеплой)"
+python3 tools/test_publish.py
 
 echo "== Тесты версии на Python"
 python3 tools/test_telegram.py
