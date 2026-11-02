@@ -175,7 +175,7 @@
   document.addEventListener('click', e => { const el = e.target.closest('[data-quick]'); if (el) { e.preventDefault(); open(el.dataset.quick); } });
   window.JQ_wireFab = function () {
     if (document.querySelector('.fab')) return;
-    const b = document.createElement('button'); b.className = 'fab'; b.type = 'button'; b.dataset.quick = 'fab';
+    const b = document.createElement('button'); b.className = 'fab'; b.type = 'button'; b.dataset.quick = 'fab'; b.setAttribute('aria-label', t('fab'));
     b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.3A8 8 0 1 1 21 12z"/></svg><span>' + t('fab') + '</span>';
     document.body.appendChild(b);
   };
