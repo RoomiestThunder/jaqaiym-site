@@ -2,6 +2,8 @@
 Используется и сервером (server.py), и статической сборкой (tools/build_static.py)."""
 import json, os, re, sys
 
+import seo
+
 LANGS = ('ru', 'kk')
 PAGES = {'/': 'index.html', '/index.html': 'index.html', '/request': 'request/index.html', '/request/': 'request/index.html', '/privacy.html': 'privacy.html'}
 
@@ -27,7 +29,12 @@ def render_page(public_dir, fname, lang, route, root='', api='', demo=False, noi
            'policyVersion': site['policy_version'], 'policyUrl': base + '/privacy.html', 'base': base, 'root': root, 'api': api, 'demo': demo}
     boot = '<script>window.JQ_LANG=%s;window.JQ_CONFIG=%s;window.I18N=%s;</script>' % (
         json.dumps(lang), json.dumps(cfg, ensure_ascii=False), json.dumps(i18n, ensure_ascii=False).replace('</', '<\\/'))
-    special = {'base': base, 'lang': lang, 'alt_href': alt, 'boot': boot, 'phone': site['phone_display'], 'phone_tel': site['phone_tel'], 'wa': site['whatsapp'], 'email': site.get('email', ''),
+    home = route in ('/', '/index.html')
+    if demo:  # демо на GitHub Pages закрыто от индексации и без абсолютных адресов
+        seo_tags = seo.demo_head(i18n, lang, root) if home else ''
+    else:
+        seo_tags = seo.head(site, i18n, lang, route, indexing=not noindex) if route in seo.INDEXABLE else ''
+    special = {'seo': seo_tags, 'base': base, 'lang': lang, 'alt_href': alt, 'boot': boot, 'phone': site['phone_display'], 'phone_tel': site['phone_tel'], 'wa': site['whatsapp'], 'email': site.get('email', ''),
                'og_locale': 'kk_KZ' if lang == 'kk' else 'ru_RU', 'alt_lang': 'ru' if lang == 'kk' else 'kk'}
 
     def sub(m):

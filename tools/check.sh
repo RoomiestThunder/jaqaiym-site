@@ -35,6 +35,9 @@ python3 tools/test_php.py
 echo "== Тесты безопасности PHP-версии"
 python3 tools/test_php_security.py
 
+echo "== Поисковики: теги, разметка, robots.txt и sitemap.xml"
+python3 tools/test_seo.py
+
 echo "== Публикация сборки в ветку deploy (автодеплой)"
 python3 tools/test_publish.py
 

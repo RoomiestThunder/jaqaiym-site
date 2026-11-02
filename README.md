@@ -98,6 +98,7 @@ Pages раздаёт папку `docs/` ветки `main`. Страницы по
 | `php/bin/cron.php` | Задача по расписанию: повтор отправок, очистка файлов, срок хранения заявок |
 | `php/config.env.example` | Пример настроек (`config.env` создаёт владелец, в git его нет) |
 | `tools/build_php.py` | Сборка `dist/`: `httpdocs/` (сайт) и `jaqaiym-private/` (код, вне корня сайта) |
+| `seo.py`, `tools/test_seo.py`, `tools/make_og_image.py` | Теги для поисковиков и соцсетей, `robots.txt`, `sitemap.xml`, тесты; сборка превью-картинки |
 | `tools/publish_deploy.sh`, `tools/test_publish.py` | Автодеплой: выкладка сборки в ветку `deploy` (её забирает Plesk) и тест этой выкладки |
 | `tools/test_php.py`, `tools/test_php_security.py` | Автотесты: функции и правила схемы (81 проверка) и «нападение» (122 проверки) |
 | `tools/contract.py` | Общий тест: оба сервера (PHP и Python) ведут себя по правилам обязательных полей из `public/schema.json` |
@@ -125,6 +126,15 @@ Pages раздаёт папку `docs/` ветки `main`. Страницы по
 - Откат: сделайте `git revert` плохого коммита и запушьте, CI выложит исправленную версию. Историю выкладок видно в ветке `deploy` и на вкладке Actions.
 - Вручную: Plesk → Git → «Получить обновления» / «Развернуть». Запасной вариант без Git: `python3 tools/build_php.py --noindex`, затем загрузить содержимое `dist/` архивом.
 - Доверие: тот, кто может писать в `main`, управляет сайтом. Включите двухфакторный вход в аккаунте GitHub и не давайте другим права записи без необходимости.
+
+**SEO и индексация.** Теги и разметку собирает `seo.py` (его вызывает `render.py`), `robots.txt` и `sitemap.xml` пишет `tools/build_static.py`; проверки в `tools/test_seo.py`.
+- Пока в GitHub (Settings → Secrets and variables → Actions → Variables) не задано `SITE_INDEXING=true`, сайт закрыт: на всех страницах `noindex`, `robots.txt` запрещает всё, `sitemap.xml` нет.
+  После смены переменной выложите сайт заново: Actions → tests → Run workflow (ветка main), либо любым коммитом.
+- Когда индексация открыта: `canonical` и `hreflang` (ru, kk, x-default) с абсолютными адресами, Open Graph и Twitter-карточки (картинка `img/brand/og.jpg` 1200×630; пересобрать: `python3 tools/make_og_image.py`),
+  разметка schema.org (Organization, WebSite; без телефона, адреса и БИН, их нельзя подтвердить), `robots.txt` (закрыт только `/api/`), `sitemap.xml` (главная и политика на двух языках).
+  Анкета остаётся с `noindex`. Заголовок страницы до 65 знаков, описание 70-160: тест следит, чтобы поисковик не обрезал.
+- Адрес с `www` постоянно (301) ведёт на основной домен (правило в `.htaccess`), `http` на `https` перенаправляет Plesk.
+- После запуска: добавьте сайт в Google Search Console и Яндекс Вебмастер (подтверждение записью TXT в DNS ps.kz или мета-тегом) и отправьте `https://jaqaiym.kz/sitemap.xml`.
 
 **Тесты и CI.** Все проверки запускаются одной командой: `bash tools/check.sh` (синтаксис PHP, Python, JavaScript, актуальность текстов i18n и три набора тестов; настоящий Telegram и токен не нужны).
 Ту же команду выполняет `.github/workflows/ci.yml` на каждом `push` на GitHub, на PHP 8.3, как на хостинге: перед отправкой на GitHub запускайте её локально.

@@ -7,10 +7,11 @@
 Результат: docs/ (ru в корне, kk в /kk/). Страницы помечены noindex, анкета работает в демо-режиме.
 Боевую сборку для хостинга с PHP делает tools/build_php.py: она использует build_site() отсюда.
 """
-import base64, hashlib, os, re, shutil, sys
+import base64, hashlib, json, os, re, shutil, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+import seo  # noqa: E402
 from render import render_page  # noqa: E402
 
 PUBLIC = os.path.join(ROOT, 'public')
@@ -24,6 +25,14 @@ def csp_meta(html):
     policy = ("default-src 'self'; script-src 'self' %s; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; "
               "connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'") % ' '.join(hashes)
     return '<meta http-equiv="Content-Security-Policy" content="%s">' % policy.replace('  ', ' ')
+
+
+def write_seo_files(out, indexing):
+    """robots.txt и sitemap.xml боевого сайта. Пока сайт закрыт (noindex), роботам запрещено всё и карты сайта нет."""
+    site_url = json.load(open(os.path.join(PUBLIC, 'site.json'), encoding='utf-8'))['site_url'].rstrip('/')
+    open(os.path.join(out, 'robots.txt'), 'w', encoding='utf-8').write(seo.robots_txt(site_url, indexing))
+    if indexing:
+        open(os.path.join(out, 'sitemap.xml'), 'w', encoding='utf-8').write(seo.sitemap_xml(site_url))
 
 
 def build_site(out, root='', demo=True, noindex=True, csp=False):
@@ -42,6 +51,8 @@ def build_site(out, root='', demo=True, noindex=True, csp=False):
             path = os.path.join(out, dst) if lang == 'ru' else os.path.join(out, 'kk', dst)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             open(path, 'wb').write(body)
+    if not demo:
+        write_seo_files(out, indexing=not noindex)
 
 
 def folder_size(path):
