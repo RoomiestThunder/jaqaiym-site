@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Jq;
 
-/** Проверка и очистка заявки. Правила обязательных полей те же, что в анкете на сайте (wizard.js). */
+/** Проверка и очистка заявки. Какие ответы обязательны, определяет schema.json (required): те же правила проверяет анкета. */
 final class Validator
 {
     private const LANGS = ['ru', 'kk'];
@@ -46,64 +46,83 @@ final class Validator
         if (!is_array($d) || array_is_list($d)) {
             return [['_' => 'Некорректный запрос'], null];
         }
-        $s = $this->schema;
+        $type = $d['lead_type'] ?? null;
+        $consent = is_array($d['consent'] ?? null) ? $d['consent'] : [];
+        [$customer, $err] = $this->customer(is_array($d['customer'] ?? null) ? $d['customer'] : []);
+        $err += $this->envelopeErrors($d, $type, $consent);
+        if ($type === 'project' && trim((string)$customer['name']) === '') {
+            $err['customer.name'] = 'Укажите имя';
+        }
+        $clean = [
+            'schema_version' => 1, 'submission_id' => self::text($d['submission_id'] ?? '', 200), 'lead_type' => $type,
+            'locale' => in_array($d['locale'] ?? null, self::LANGS, true) ? $d['locale'] : 'ru',
+            'source' => $this->source($d['source'] ?? null), 'customer' => $customer,
+            'consent' => ['project_contact' => true, 'policy_version' => self::text($consent['policy_version'] ?? '', 40)],
+        ];
+        if ($type === 'quick') {
+            [$clean['quick'], $more] = $this->quick($d['quick'] ?? null);
+        } elseif ($type === 'project') {
+            [$more, $clean['project']] = $this->project(is_array($d['project'] ?? null) ? $d['project'] : []);
+        }
+        return [$err + ($more ?? []), $clean];
+    }
+
+    /**
+     * @param array<string,mixed> $d @param array<string,mixed> $consent
+     * @return array<string,string>
+     */
+    private function envelopeErrors(array $d, mixed $type, array $consent): array
+    {
         $err = [];
-        if (($d['schema_version'] ?? null) !== $s->version()) {
+        if (($d['schema_version'] ?? null) !== $this->schema->version()) {
             $err['schema_version'] = 'Неподдерживаемая версия формы. Обновите страницу.';
         }
-        $sid = self::text($d['submission_id'] ?? '', 200);
-        if (!preg_match('/\A[0-9a-fA-F-]{16,64}\z/', $sid)) {
+        if (!preg_match('/\A[0-9a-fA-F-]{16,64}\z/', self::text($d['submission_id'] ?? '', 200))) {
             $err['submission_id'] = 'Некорректный идентификатор заявки';
         }
-        $lt = $d['lead_type'] ?? null;
-        if ($lt !== 'project' && $lt !== 'quick') {
+        if ($type !== 'project' && $type !== 'quick') {
             $err['lead_type'] = 'Некорректный тип заявки';
-        }
-        $c = is_array($d['customer'] ?? null) ? $d['customer'] : [];
-        $consent = is_array($d['consent'] ?? null) ? $d['consent'] : [];
-        $phone = self::normPhone($c['phone'] ?? null);
-        if ($phone === null) {
-            $err['customer.phone'] = 'Укажите номер телефона Казахстана, например +7 700 000 00 00';
         }
         if (($consent['project_contact'] ?? null) !== true) {
             $err['consent'] = 'Нужно согласие на обработку данных';
         }
-        if ($lt === 'project' && trim(self::text($c['name'] ?? '', 100)) === '') {
-            $err['customer.name'] = 'Укажите имя';
+        return $err;
+    }
+
+    /** @param array<string,mixed> $c @return array{0: array<string,mixed>, 1: array<string,string>} */
+    private function customer(array $c): array
+    {
+        $s = $this->schema;
+        $err = [];
+        $phone = self::normPhone($c['phone'] ?? null);
+        if ($phone === null) {
+            $err['customer.phone'] = 'Укажите номер телефона Казахстана, например +7 700 000 00 00';
         }
         $clean = [
-            'schema_version' => 1, 'submission_id' => $sid, 'lead_type' => $lt,
-            'locale' => in_array($d['locale'] ?? null, self::LANGS, true) ? $d['locale'] : 'ru',
-            'source' => $this->source($d['source'] ?? null),
-            'customer' => [
-                'name' => self::text($c['name'] ?? '', 100) ?: null, 'phone' => $phone,
-                'preferred_channel' => $s->has('channel', $c['preferred_channel'] ?? null) ? $c['preferred_channel'] : null,
-                'preferred_time' => self::text($c['preferred_time'] ?? '', 100) ?: null,
-                'email' => self::text($c['email'] ?? '', 150) ?: null,
-                'company' => self::text($c['company'] ?? '', 150) ?: null,
-                'role' => $s->has('role', $c['role'] ?? null) ? $c['role'] : null,
-            ],
-            'consent' => ['project_contact' => true, 'policy_version' => self::text($consent['policy_version'] ?? '', 40)],
+            'name' => self::text($c['name'] ?? '', 100) ?: null, 'phone' => $phone,
+            'preferred_channel' => $s->has('channel', $c['preferred_channel'] ?? null) ? $c['preferred_channel'] : null,
+            'preferred_time' => self::text($c['preferred_time'] ?? '', 100) ?: null,
+            'email' => self::text($c['email'] ?? '', 150) ?: null,
+            'company' => self::text($c['company'] ?? '', 150) ?: null,
+            'role' => $s->has('role', $c['role'] ?? null) ? $c['role'] : null,
         ];
-        $email = $clean['customer']['email'];
-        if ($email !== null && !preg_match('/\A[^@\s]+@[^@\s]+\.[^@\s]+\z/u', $email)) {
+        if ($clean['email'] !== null && !preg_match('/\A[^@\s]+@[^@\s]+\.[^@\s]+\z/u', $clean['email'])) {
             $err['customer.email'] = 'Проверьте адрес электронной почты';
         }
-        if ($lt === 'quick') {
-            $q = is_array($d['quick'] ?? null) ? $d['quick'] : [];
-            if (!$s->has('quick_type', $q['request_type'] ?? null)) {
-                $err['quick.request_type'] = 'Выберите, чем помочь';
-            }
-            $clean['quick'] = [
-                'request_type' => $s->has('quick_type', $q['request_type'] ?? null) ? $q['request_type'] : null,
-                'message' => self::text($q['message'] ?? '', 1000) ?: null,
-                'context' => self::text($q['context'] ?? '', 200) ?: null,
-            ];
-        } elseif ($lt === 'project') {
-            [$projectErr, $clean['project']] = $this->project(is_array($d['project'] ?? null) ? $d['project'] : []);
-            $err += $projectErr;
-        }
-        return [$err, $clean];
+        return [$clean, $err];
+    }
+
+    /** @return array{0: array<string,mixed>, 1: array<string,string>} */
+    private function quick(mixed $raw): array
+    {
+        $q = is_array($raw) ? $raw : [];
+        $type = $this->schema->has('quick_type', $q['request_type'] ?? null) ? $q['request_type'] : null;
+        $clean = [
+            'request_type' => $type,
+            'message' => self::text($q['message'] ?? '', 1000) ?: null,
+            'context' => self::text($q['context'] ?? '', 200) ?: null,
+        ];
+        return [$clean, $type === null ? ['quick.request_type' => 'Выберите, чем помочь'] : []];
     }
 
     /** @return array<string,mixed> */
@@ -260,40 +279,33 @@ final class Validator
     }
 
     /**
-     * Без этих ответов заявка «полупустая».
+     * Без обязательных ответов заявка «полупустая». Список полей и тексты ошибок лежат в schema.json (required).
      * @param array<string,mixed> $pr @return array<string,string>
      */
     private function required(array $pr, string $cat): array
     {
-        $s = $this->schema;
-        $f = $pr['features'];
-        $e = [];
-        $need = function (string $key, bool $ok, string $msg) use (&$e): void {
-            if (!$ok) {
-                $e['project.' . $key] = $msg;
+        $rules = $this->schema->required();
+        $names = array_merge($rules['by_category']['all'] ?? [], $rules['by_category'][$cat] ?? []);
+        $errors = [];
+        foreach ($names as $name) {
+            $spec = $rules['fields'][$name] ?? throw new \LogicException('В schema.json нет описания обязательного поля ' . $name);
+            $inFeatures = $spec['in'] === 'features';
+            $value = $inFeatures ? ($pr['features'][$name] ?? null) : ($pr[$name] ?? null);
+            if (!$this->answered($spec, $value)) {
+                $errors['project.' . ($inFeatures ? 'features.' : '') . $name] = (string)$spec['msg'];
             }
-        };
-        $need('premise', $s->has('premise', $pr['premise'] ?? null), 'Укажите, где будет стоять мебель');
-        $need('style_preferences', $pr['style_preferences'] !== [], 'Выберите внешний вид');
-        if ($cat === 'kitchen') {
-            $need('layout', $s->has('kitchen_layout', $pr['layout'] ?? null), 'Укажите планировку кухни');
-            foreach (['upper_cabinets', 'island', 'built_in_appliances'] as $k) {
-                $need('features.' . $k, $s->has('yes_no', $f[$k] ?? null), 'Ответьте про ' . $k);
-            }
-        } elseif ($cat === 'wardrobe') {
-            $need('wardrobe_kind', $s->has('wardrobe_kind', $pr['wardrobe_kind'] ?? null), 'Укажите, какой шкаф нужен');
-            $need('features.door_type', !empty($f['door_type']), 'Выберите тип дверей');
-            $need('features.storage_priorities', !empty($f['storage_priorities']), 'Выберите, что хранить внутри');
-        } elseif ($cat === 'other_furniture') {
-            $need('features.purposes', !empty($f['purposes']), 'Укажите назначение мебели');
-        } elseif ($cat === 'business') {
-            $need('business_scope', $s->has('business_scope', $pr['business_scope'] ?? null), 'Укажите, сколько объектов');
-            $need('features.object_type', !empty($f['object_type']), 'Укажите тип объекта');
-            $need('features.task', !empty($f['task']), 'Опишите задачу');
-            $need('features.quantity', !empty($f['quantity']), 'Укажите количество');
-        } else {
-            $need('description', mb_strlen(trim((string)($pr['description'] ?? ''))) >= 5, 'Опишите, что вы хотите сделать');
         }
-        return $e;
+        return $errors;
+    }
+
+    /** @param array<string,mixed> $spec */
+    private function answered(array $spec, mixed $value): bool
+    {
+        return match ($spec['type']) {
+            'choice' => $this->schema->has((string)$spec['group'], $value),
+            'list' => is_array($value) && $value !== [],
+            'text' => mb_strlen(trim(is_scalar($value) ? (string)$value : '')) >= (int)($spec['min'] ?? 1),
+            default => throw new \LogicException('Неизвестный тип правила: ' . $spec['type']),
+        };
     }
 }

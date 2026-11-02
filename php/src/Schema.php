@@ -32,6 +32,16 @@ final class Schema
         return $this->data['limits'];
     }
 
+    /**
+     * Обязательные ответы по типам заказа (общие для сервера и анкеты).
+     * @return array{by_category: array<string,list<string>>, fields: array<string,array<string,mixed>>}
+     */
+    public function required(): array
+    {
+        $r = is_array($this->data['required'] ?? null) ? $this->data['required'] : [];
+        return ['by_category' => $r['by_category'] ?? [], 'fields' => $r['fields'] ?? []];
+    }
+
     /** @return array<string,string> */
     public function group(string $name): array
     {

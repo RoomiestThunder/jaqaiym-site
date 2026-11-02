@@ -11,6 +11,7 @@ namespace Jq;
 final class Maintenance
 {
     private const KEY = 'maintenance_at';
+    private const MAX_LOG_BYTES = 1048576;
 
     public function __construct(
         private readonly Config $cfg,
@@ -30,8 +31,18 @@ final class Maintenance
             'leads_purged' => $this->purgeExpired(),
         ];
         $this->limiter->prune();
+        $this->rotateLog();
         $this->db->run('INSERT OR REPLACE INTO kv(k,v) VALUES(?,?)', [self::KEY, (string)time()]);
         return $done;
+    }
+
+    /** Журнал ошибок PHP не растёт без предела: больше 1 МБ — прошлый уходит в php-error.log.1, начинается новый. */
+    private function rotateLog(): void
+    {
+        $log = $this->cfg->dataDir . '/php-error.log';
+        if (is_file($log) && filesize($log) > self::MAX_LOG_BYTES) {
+            rename($log, $log . '.1');
+        }
     }
 
     public function runIfDue(int $everySeconds = 300): void

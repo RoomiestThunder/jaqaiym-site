@@ -9,24 +9,19 @@ final class PublicApi
     private const MAX_JSON = 200 * 1024;
     private const MAX_UPDATE = 100 * 1024;
     private const PART_SUFFIX = '.part';
+    private const HEAD_BYTES = 16;
 
     public function __construct(private readonly Services $s)
     {
     }
 
+    // ---------- заявка ----------
+
     public function leads(): void
     {
-        $len = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
-        if ($len <= 0 || $len > self::MAX_JSON) {
-            Http::json(413, ['error' => 'too_large']);
-            return;
-        }
-        if (!$this->originOk()) {
-            Http::json(403, ['error' => 'forbidden_origin']);
-            return;
-        }
-        if (!$this->s->limiter->allow('lead', $this->s->limiter->who(Http::ip()), $this->s->cfg->rateLeads)) {
-            Http::json(429, ['error' => 'rate_limited', 'message' => 'Слишком много попыток. Попробуйте позже.']);
+        $reject = $this->leadRejection((int)($_SERVER['CONTENT_LENGTH'] ?? 0));
+        if ($reject !== null) {
+            Http::json($reject[0], $reject[1]);
             return;
         }
         $raw = Http::body(self::MAX_JSON);
@@ -35,8 +30,7 @@ final class PublicApi
             Http::json(400, ['error' => 'bad_json']);
             return;
         }
-        $trap = is_array($d) ? ($d['hp'] ?? '') : '';
-        if (is_array($trap) || (is_scalar($trap) && trim((string)$trap) !== '')) { // антиспам-приманка: тихо отбрасываем
+        if ($this->isTrapped($d)) { // антиспам-приманка: тихо отбрасываем
             Http::json(201, ['ok' => true, 'lead_id' => 0]);
             return;
         }
@@ -45,6 +39,33 @@ final class PublicApi
             Http::json(422, ['error' => 'validation', 'errors' => $err]);
             return;
         }
+        $this->saveAndNotify($clean);
+    }
+
+    /** Отказ до чтения тела: размер, чужой Origin, частота. @return array{0:int,1:array<string,mixed>}|null */
+    private function leadRejection(int $len): ?array
+    {
+        if ($len <= 0 || $len > self::MAX_JSON) {
+            return [413, ['error' => 'too_large']];
+        }
+        if (!Http::originAllowed($this->s->cfg)) {
+            return [403, ['error' => 'forbidden_origin']];
+        }
+        if (!$this->s->limiter->allow('lead', $this->s->limiter->who(Http::ip()), $this->s->cfg->rateLeads)) {
+            return [429, ['error' => 'rate_limited', 'message' => 'Слишком много попыток. Попробуйте позже.']];
+        }
+        return null;
+    }
+
+    private function isTrapped(mixed $d): bool
+    {
+        $trap = is_array($d) ? ($d['hp'] ?? '') : '';
+        return is_array($trap) || (is_scalar($trap) && trim((string)$trap) !== '');
+    }
+
+    /** @param array<string,mixed> $clean */
+    private function saveAndNotify(array $clean): void
+    {
         try {
             [$id, $dup] = $this->s->leads->create($clean);
         } catch (\DomainException $e) {
@@ -62,35 +83,20 @@ final class PublicApi
         $this->s->maintenance->runIfDue();
     }
 
+    // ---------- файл ----------
+
     public function upload(): void
     {
-        $cfg = $this->s->cfg;
-        $maxMb = (int)$this->s->schema->limits()['max_file_mb'];
         $len = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
-        if ($len <= 0) {
-            Http::json(400, ['error' => 'empty']);
-            return;
-        }
-        if ($len > $maxMb * 1048576) {
-            Http::json(413, ['error' => 'too_large', 'message' => 'Файл больше ' . $maxMb . ' МБ']);
-            return;
-        }
-        if (!$this->originOk()) {
-            Http::json(403, ['error' => 'forbidden_origin']);
-            return;
-        }
-        if (!$this->s->limiter->allow('upload', $this->s->limiter->who(Http::ip()), $cfg->rateUploads)) {
-            Http::json(429, ['error' => 'rate_limited', 'message' => 'Слишком много загрузок. Попробуйте позже.']);
-            return;
-        }
-        if ($this->s->files->usedBytes() + $len > $cfg->quotaBytes || $this->s->files->freeBytes() - $len < $cfg->minFreeBytes) {
-            Http::json(507, ['error' => 'storage_full', 'message' => 'Загрузка файлов сейчас недоступна. Отправьте заявку без файлов: их можно показать при разговоре.']);
+        $reject = $this->uploadRejection($len);
+        if ($reject !== null) {
+            Http::json($reject[0], $reject[1]);
             return;
         }
         $in = fopen('php://input', 'rb');
-        $head = (string)fread($in, 16);
+        $head = (string)fread($in, self::HEAD_BYTES);
         if ($head === '') { // PHP отбросил тело, потому что оно больше post_max_size сервера
-            Http::json(413, ['error' => 'too_large', 'message' => 'Файл больше ' . $maxMb . ' МБ']);
+            Http::json(...$this->tooLarge());
             return;
         }
         $mime = Files::sniff($head);
@@ -99,10 +105,9 @@ final class PublicApi
             return;
         }
         $id = bin2hex(random_bytes(16));
-        $final = $this->s->files->path($id);
-        $size = $this->saveStream($in, $head, $final, $maxMb * 1048576);
+        $size = $this->saveStream($in, $head, $this->s->files->path($id), $this->maxFileBytes());
         if ($size === null) {
-            Http::json(413, ['error' => 'too_large', 'message' => 'Файл больше ' . $maxMb . ' МБ']);
+            Http::json(...$this->tooLarge());
             return;
         }
         $name = Files::cleanName(Http::reqHeader('X-File-Name') ?: 'file');
@@ -111,6 +116,39 @@ final class PublicApi
             [$id, $name, $mime, $size, $id, Clock::now()],
         );
         Http::json(201, ['id' => $id, 'name' => $name, 'size' => $size, 'mime' => $mime]);
+    }
+
+    private function maxFileBytes(): int
+    {
+        return (int)$this->s->schema->limits()['max_file_mb'] * 1048576;
+    }
+
+    /** @return array{0:int,1:array<string,mixed>} */
+    private function tooLarge(): array
+    {
+        return [413, ['error' => 'too_large', 'message' => 'Файл больше ' . (int)$this->s->schema->limits()['max_file_mb'] . ' МБ']];
+    }
+
+    /** Отказ до чтения файла: размер, чужой Origin, частота, место на диске. @return array{0:int,1:array<string,mixed>}|null */
+    private function uploadRejection(int $len): ?array
+    {
+        $cfg = $this->s->cfg;
+        if ($len <= 0) {
+            return [400, ['error' => 'empty']];
+        }
+        if ($len > $this->maxFileBytes()) {
+            return $this->tooLarge();
+        }
+        if (!Http::originAllowed($cfg)) {
+            return [403, ['error' => 'forbidden_origin']];
+        }
+        if (!$this->s->limiter->allow('upload', $this->s->limiter->who(Http::ip()), $cfg->rateUploads)) {
+            return [429, ['error' => 'rate_limited', 'message' => 'Слишком много загрузок. Попробуйте позже.']];
+        }
+        if ($this->s->files->usedBytes() + $len > $cfg->quotaBytes || $this->s->files->freeBytes() - $len < $cfg->minFreeBytes) {
+            return [507, ['error' => 'storage_full', 'message' => 'Загрузка файлов сейчас недоступна. Отправьте заявку без файлов: их можно показать при разговоре.']];
+        }
+        return null;
     }
 
     /** Пишет файл через временное имя; null, если он оказался больше лимита. */
@@ -123,12 +161,14 @@ final class PublicApi
         $size = strlen($head) + (int)stream_copy_to_stream($in, $out, $max + 1 - strlen($head));
         fclose($out);
         if ($size > $max) {
-            @unlink($tmp);
+            unlink($tmp);
             return null;
         }
         rename($tmp, $final);
         return $size;
     }
+
+    // ---------- вебхук Telegram ----------
 
     public function webhook(): void
     {
@@ -153,10 +193,5 @@ final class PublicApi
         } catch (\Throwable $e) {
             error_log('jaqaiym webhook: ' . $e->getMessage());
         }
-    }
-
-    private function originOk(): bool
-    {
-        return Http::originAllowed($this->s->cfg);
     }
 }

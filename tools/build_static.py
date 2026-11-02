@@ -21,7 +21,7 @@ INLINE_SCRIPT = re.compile(rb'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', re.S)
 def csp_meta(html):
     """Политика безопасности страницы: скрипты только свои и встроенные с известным хешем (подставляется при сборке)."""
     hashes = sorted({"'sha256-%s'" % base64.b64encode(hashlib.sha256(m).digest()).decode() for m in INLINE_SCRIPT.findall(html)})
-    policy = ("default-src 'self'; script-src 'self' %s; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
+    policy = ("default-src 'self'; script-src 'self' %s; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; "
               "connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'") % ' '.join(hashes)
     return '<meta http-equiv="Content-Security-Policy" content="%s">' % policy.replace('  ', ' ')
 

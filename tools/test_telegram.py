@@ -15,6 +15,8 @@
 import email, email.policy, json, os, re, shutil, sqlite3, subprocess, sys, tempfile, threading, time, urllib.error, urllib.parse, urllib.request, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import contract
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FAILS, OKS = [], 0
 
@@ -256,6 +258,7 @@ def main():
         check(wait(lambda: S3.lead_row(lid)['notified'] == 1), 'заявка записана в outbox')
         check(S3.lead_row(lid)['notified_via'] == 'outbox' and os.path.exists(os.path.join(S3.dir, 'outbox.log')), 'способ: outbox, файл outbox.log создан')
         check(S3.disk() == ids, 'файлы остаются до срока хранения')
+        contract.run(S3, check)
     finally:
         S3.stop()
     httpd.shutdown()

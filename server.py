@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """JAQAIYM: статика + приём заявок (прототип этапа 3 из ТЗ).
 
+СТАТУС: не боевой сервер. На хостинге ps.kz (нет Python и SSH) работает версия на PHP из каталога php/.
+Этот файл оставлен для локальной разработки (страницы собираются на лету, без сборки) и как запасной вариант для VPS.
+Новые возможности сюда не добавляются; правила обязательных полей общие: они лежат в public/schema.json (required).
+Для разработки с настоящим токеном бота заведите отдельного тестового бота: server.py вызывает deleteWebhook и отключит вебхук боевого сайта.
+
 Запуск:  python3 server.py [порт]        (по умолчанию 8123)
 Переменные окружения (все необязательны; локально их можно положить в файл .env рядом с server.py, он в .gitignore):
   ADMIN_TOKEN          токен для /admin (иначе генерируется и хранится в data/admin_token.txt)
@@ -232,29 +237,21 @@ def validate(d):
         clean['project'] = pr
     return err, clean
 
+def answered(spec, value):
+    kind = spec['type']
+    if kind == 'choice': return isinstance(value, str) and value in SCHEMA[spec['group']]
+    if kind == 'list': return isinstance(value, list) and bool(value)
+    if kind == 'text': return len(str(value or '').strip()) >= spec.get('min', 1)
+    raise ValueError('Неизвестный тип правила: ' + kind)
+
 def required_project_fields(pr, cat):
-    """Без этих ответов заявка «полупустая»: те же правила проверяет анкета на фронтенде."""
-    e, f = {}, pr.get('features') or {}
-    def need(key, ok, msg):
-        if not ok: e['project.' + key] = msg
-    need('premise', pr.get('premise') in SCHEMA['premise'], 'Укажите, где будет стоять мебель')
-    need('style_preferences', bool(pr.get('style_preferences')), 'Выберите внешний вид')
-    if cat == 'kitchen':
-        need('layout', pr.get('layout') in SCHEMA['kitchen_layout'], 'Укажите планировку кухни')
-        for k in ('upper_cabinets', 'island', 'built_in_appliances'): need('features.' + k, f.get(k) in SCHEMA['yes_no'], 'Ответьте про ' + k)
-    elif cat == 'wardrobe':
-        need('wardrobe_kind', pr.get('wardrobe_kind') in SCHEMA['wardrobe_kind'], 'Укажите, какой шкаф нужен')
-        need('features.door_type', bool(f.get('door_type')), 'Выберите тип дверей')
-        need('features.storage_priorities', bool(f.get('storage_priorities')), 'Выберите, что хранить внутри')
-    elif cat == 'other_furniture':
-        need('features.purposes', bool(f.get('purposes')), 'Укажите назначение мебели')
-    elif cat == 'business':
-        need('business_scope', pr.get('business_scope') in SCHEMA['business_scope'], 'Укажите, сколько объектов')
-        need('features.object_type', bool(f.get('object_type')), 'Укажите тип объекта')
-        need('features.task', bool(f.get('task')), 'Опишите задачу')
-        need('features.quantity', bool(f.get('quantity')), 'Укажите количество')
-    else:
-        need('description', len(str(pr.get('description') or '').strip()) >= 5, 'Опишите, что вы хотите сделать')
+    """Без этих ответов заявка «полупустая». Список полей и тексты ошибок лежат в schema.json (required): их же проверяют PHP-сервер и анкета."""
+    rules, e, f = SCHEMA['required'], {}, pr.get('features') or {}
+    for name in rules['by_category']['all'] + rules['by_category'].get(cat, []):
+        spec = rules['fields'][name]
+        in_features = spec['in'] == 'features'
+        if not answered(spec, f.get(name) if in_features else pr.get(name)):
+            e['project.' + ('features.' if in_features else '') + name] = spec['msg']
     return e
 
 def create_lead(clean):

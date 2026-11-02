@@ -307,6 +307,8 @@ def section_static():
         if not meta or any(h not in meta.group(1) for h in hashes) or "object-src 'none'" not in meta.group(1) or re.search(r"script-src[^;]*unsafe", meta.group(1)) or re.search(r'\son(click|change|submit|load|error)=', html):
             bad.append(os.path.relpath(p, dist))
     check(pages and not bad, 'во всех %d страницах CSP покрывает каждый встроенный скрипт, без unsafe-* для скриптов и inline-обработчиков: %s' % (len(pages), bad))
+    request_page = open(os.path.join(dist, 'httpdocs', 'request', 'index.html'), encoding='utf-8').read()
+    check("img-src 'self' data: blob:" in request_page, 'CSP разрешает blob: для картинок (анкета показывает миниатюры загруженных фото через URL.createObjectURL)')
     ht = open(os.path.join(dist, 'httpdocs', '.htaccess')).read()
     for needle in ('Options -Indexes', 'RewriteRule ^(api|admin)', 'X-Frame-Options', 'Strict-Transport-Security', 'X-Content-Type-Options', 'Require all denied'):
         check(needle in ht, '.htaccess содержит «%s»' % needle)

@@ -16,6 +16,7 @@ import json, os, re, sys, threading, urllib.request
 from http.server import ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import contract  # noqa: E402
 import php_harness as H  # noqa: E402
 
 T = H.T
@@ -23,24 +24,30 @@ check, wait, sent, Mock = T.check, T.wait, T.sent, T.Mock
 PNG, JPG, PDF = T.PNG, T.JPG, T.PDF
 
 
+def missing_page_refs(root, path):
+    """Ссылки href/src на странице, которые ведут на несуществующий файл сборки."""
+    refs = re.findall(r'(?:href|src)="(/[^"#?]*)', open(path, encoding='utf-8').read())
+    local = [r for r in refs if not r.startswith(('//', '/api', '/admin'))]
+    targets = [(r, os.path.join(root, r.lstrip('/'))) for r in local]
+    return ['%s -> %s' % (os.path.relpath(path, root), r) for r, t in targets
+            if not (os.path.isfile(t) or os.path.isfile(os.path.join(t, 'index.html')))]
+
+
+def missing_style_refs(root, path):
+    """url() в стилях (шрифты, картинки), которые ведут на несуществующий файл."""
+    refs = [r.strip('\'"') for r in re.findall(r'url\(([^)]+)\)', open(path, encoding='utf-8').read())]
+    return ['%s -> %s' % (os.path.relpath(path, root), r) for r in refs
+            if not r.startswith('data:') and not os.path.isfile(os.path.normpath(os.path.join(os.path.dirname(path), r)))]
+
+
 def broken_links(dist):
-    """Ссылки в страницах (href/src) и url() в стилях, которые ведут на несуществующий файл сборки."""
     root, bad = os.path.join(dist, 'httpdocs'), []
     for dp, _, fs in os.walk(root):
         for f in fs:
-            p = os.path.join(dp, f)
             if f.endswith('.html'):
-                for ref in re.findall(r'(?:href|src)="(/[^"#?]*)', open(p, encoding='utf-8').read()):
-                    if ref.startswith(('//', '/api', '/admin')):
-                        continue
-                    target = os.path.join(root, ref.lstrip('/'))
-                    if not (os.path.isfile(target) or os.path.isfile(os.path.join(target, 'index.html'))):
-                        bad.append('%s -> %s' % (os.path.relpath(p, root), ref))
+                bad += missing_page_refs(root, os.path.join(dp, f))
             elif f.endswith('.css'):
-                for ref in re.findall(r'url\(([^)]+)\)', open(p, encoding='utf-8').read()):
-                    ref = ref.strip('\'"')
-                    if not ref.startswith('data:') and not os.path.isfile(os.path.normpath(os.path.join(dp, ref))):
-                        bad.append('%s -> %s' % (os.path.relpath(p, root), ref))
+                bad += missing_style_refs(root, os.path.join(dp, f))
     return bad
 
 
@@ -165,6 +172,7 @@ def main():
         bad = broken_links(H.dist())
         check(not bad, 'все ссылки страниц и url() в стилях (шрифты, картинки) ведут на существующие файлы: %s' % bad[:5])
         check(S3.raw('GET', '/fonts/manrope-latin.woff2')[0] == 200, 'шрифт отдаётся с сервера (200)')
+        contract.run(S3, check)
     finally:
         S3.stop()
         httpd.shutdown()
