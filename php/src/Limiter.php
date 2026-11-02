@@ -10,8 +10,13 @@ final class Limiter
     {
     }
 
+    /** Ключ посетителя для счётчиков. Адреса IPv6 считаются по сети /64: у одного абонента их миллиарды, а лимит должен быть общим. */
     public function who(string $ip): string
     {
+        $packed = @inet_pton($ip);
+        if ($packed !== false && strlen($packed) === 16) {
+            $ip = bin2hex(substr($packed, 0, 8)) . '/64';
+        }
         return substr(hash_hmac('sha256', $ip, $this->cfg->key('ip')), 0, 24);
     }
 

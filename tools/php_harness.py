@@ -1,6 +1,6 @@
 """Общая обвязка тестов PHP-версии: боевая сборка во временную папку, встроенный сервер PHP,
 «планировщик» (cron.php раз в полсекунды), вход в админку, подставной Telegram из test_telegram.py."""
-import http.client, json, os, re, shutil, signal, subprocess, sys, tempfile, threading, time, urllib.parse
+import base64, hashlib, hmac, http.client, json, os, re, shutil, signal, struct, subprocess, sys, tempfile, threading, time, urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import test_telegram as T  # noqa: E402
@@ -10,6 +10,15 @@ ADMIN = 'admin-test-password-0123456789'
 WEBHOOK_SECRET = 'wh-secret-test'
 MOCK_URL = 'http://127.0.0.1:8132'
 _dist = []
+
+
+def totp_code(secret_b32, at=None):
+    """Одноразовый код по RFC 6238 (HMAC-SHA1, шаг 30 с, 6 цифр): независимая от PHP реализация для сверки."""
+    key = base64.b32decode(secret_b32 + '=' * (-len(secret_b32) % 8), casefold=True)
+    counter = int((time.time() if at is None else at) // 30)
+    mac = hmac.new(key, struct.pack('>Q', counter), hashlib.sha1).digest()
+    offset = mac[-1] & 15
+    return '%06d' % ((struct.unpack('>I', mac[offset:offset + 4])[0] & 0x7fffffff) % 10 ** 6)
 
 
 def dist():
@@ -41,6 +50,7 @@ class PhpSrv(T.Srv):
             e.pop(k, None)
         e.update({k: v for k, v in env.items() if v is not None})
         self.env = e
+        self.admin_path, self.totp_secret = e.get('ADMIN_PATH', '/admin'), e.get('ADMIN_TOTP_SECRET', '')
         # настройки PHP, как на нормальном хостинге: ошибки в журнал, а не в ответ; лимит тела не меньше 11 МБ
         self.p = subprocess.Popen(['php', '-d', 'display_errors=0', '-d', 'post_max_size=16M', '-d', 'upload_max_filesize=16M',
                                    '-S', '127.0.0.1:%d' % port, '-t', os.path.join(d, 'httpdocs'), os.path.join(ROOT, 'php', 'dev-router.php')],
@@ -89,17 +99,26 @@ class PhpSrv(T.Srv):
         c.close()
         return r.status, r, data
 
-    def login(self, password=None):
-        form = urllib.parse.urlencode({'password': password if password is not None else ADMIN})
-        st, r, body = self.raw('POST', '/admin/login', form, {'Content-Type': 'application/x-www-form-urlencoded'})
+    def login(self, password=None, code=None, step_offset=0, xff=None):
+        """Вход. code=None: при включённой 2FA подставляется верный код (со сдвигом step_offset шагов по 30 с); code='' — без кода.
+        xff: адрес «посетителя» (за прокси сервер берёт последнюю запись X-Forwarded-For)."""
+        fields = {'password': password if password is not None else ADMIN}
+        if code is None and self.totp_secret:
+            code = totp_code(self.totp_secret, time.time() + 30 * step_offset)
+        if code:
+            fields['code'] = code
+        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+        if xff:
+            headers['X-Forwarded-For'] = xff
+        st, r, body = self.raw('POST', self.admin_path + '/login', urllib.parse.urlencode(fields), headers)
         header = r.getheader('Set-Cookie') or ''
         return st, (header.split(';')[0] if header else None), header
 
     def session(self):
-        """Вход под правильным паролем: (cookie, csrf-токен страницы)."""
+        """Вход под правильным паролем (и кодом, если включена 2FA): (cookie, csrf-токен страницы)."""
         st, cookie, _ = self.login()
         assert st == 303 and cookie, 'вход не удался: %s' % st
-        st, _, body = self.raw('GET', '/admin', headers={'Cookie': cookie})
+        st, _, body = self.raw('GET', self.admin_path, headers={'Cookie': cookie})
         return cookie, re.search(rb'var csrf="([0-9a-f]+)"', body).group(1).decode()
 
     def admin_get(self, path, cookie):

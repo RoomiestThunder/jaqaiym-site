@@ -5,3 +5,5 @@ __pycache__/
 public/img/own/
 .env
 dist/
+# локальные файлы с секретами (config.env, jaqaiym-production-config.env и т. п.); шаблон php/config.env.example это не затрагивает
+*.env

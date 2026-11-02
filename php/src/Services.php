@@ -33,6 +33,6 @@ final class Services
         $this->subs = new Subscribers($cfg, $this->db, $this->tg, $this->limiter);
         $this->notifier = new Notifier($cfg, $this->db, $this->tg, $this->files, $this->summary, $this->subs);
         $this->maintenance = new Maintenance($cfg, $this->db, $this->notifier, $this->files, $this->limiter);
-        $this->auth = new Auth($cfg, $this->limiter);
+        $this->auth = new Auth($cfg, $this->limiter, $this->db);
     }
 }

@@ -18,7 +18,7 @@ final class AdminController
         $nonce = base64_encode(random_bytes(16));
         header("Content-Security-Policy: default-src 'none'; style-src 'nonce-$nonce'; script-src 'nonce-$nonce'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
         if (!$this->s->auth->valid()) {
-            Http::html($this->s->cfg->adminEnabled() ? 200 : 503, AdminPage::login($nonce, null, $this->s->cfg->adminEnabled()));
+            Http::html($this->s->cfg->adminEnabled() ? 200 : 503, $this->loginPage($nonce, null));
             return;
         }
         Http::html(200, AdminPage::dashboard($this->dashboardData(), $nonce));
@@ -29,22 +29,40 @@ final class AdminController
         $nonce = base64_encode(random_bytes(16));
         header("Content-Security-Policy: default-src 'none'; style-src 'nonce-$nonce'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
         $cfg = $this->s->cfg;
-        $enabled = $cfg->adminEnabled();
-        if (!$enabled || !Http::originAllowed($cfg, false)) {
-            Http::html($enabled ? 403 : 503, AdminPage::login($nonce, $enabled ? 'Запрос отклонён.' : null, $enabled));
+        if (!$cfg->adminEnabled()) {
+            Http::html(503, $this->loginPage($nonce, null));
             return;
         }
-        if (!$this->s->auth->loginAllowed(Http::ip())) {
-            Http::html(429, AdminPage::login($nonce, 'Слишком много попыток входа. Подождите 15 минут.', true));
+        if (!Http::originAllowed($cfg, false)) {
+            Http::html(403, $this->loginPage($nonce, 'Запрос отклонён.'));
             return;
         }
-        if (!$this->s->auth->passwordOk((string)($_POST['password'] ?? ''))) {
+        $ip = Http::ip();
+        if ($this->s->auth->loginBlocked($ip)) {
+            Http::html(429, $this->loginPage($nonce, 'Слишком много неудачных попыток входа. Подождите 15 минут.'));
+            return;
+        }
+        if (!$this->s->auth->credentialsOk(self::postString('password'), self::postString('code'))) {
+            $this->s->auth->loginFailed($ip);
             usleep(400000); // замедляет перебор
-            Http::html(401, AdminPage::login($nonce, 'Неверный пароль.', true));
+            $hint = $this->s->auth->twoFactorEnabled() ? 'Неверный пароль или код. Каждый код действует один раз: дождитесь нового.' : 'Неверный пароль.';
+            Http::html(401, $this->loginPage($nonce, $hint));
             return;
         }
         $this->s->auth->grant();
-        Http::redirect('/admin');
+        Http::redirect($cfg->adminPath);
+    }
+
+    private function loginPage(string $nonce, ?string $error): string
+    {
+        $cfg = $this->s->cfg;
+        return AdminPage::login($nonce, $error, $cfg->adminProblem, $cfg->adminPath . '/login', $this->s->auth->twoFactorEnabled());
+    }
+
+    private static function postString(string $key): string
+    {
+        $value = $_POST[$key] ?? '';
+        return is_string($value) ? $value : '';
     }
 
     public function logout(): void
@@ -158,7 +176,7 @@ final class AdminController
         }
         return [
             'leads' => $leads, 'status' => $schema->group('status'), 'csrf' => $this->s->auth->csrf(),
-            'tg' => $this->telegramInfo(), 'diag' => $this->diagnostics(),
+            'tg' => $this->telegramInfo(), 'diag' => $this->diagnostics(), 'logout_url' => $this->s->cfg->adminPath . '/logout',
         ];
     }
 
@@ -230,6 +248,7 @@ final class AdminController
             'outside' => !str_starts_with($data . '/', rtrim($pub, '/') . '/'),
             'free' => $this->s->files->freeBytes(), 'used' => $this->s->files->usedBytes(), 'quota' => $cfg->quotaBytes,
             'client_ip' => Http::ip(), 'remote_addr' => (string)($_SERVER['REMOTE_ADDR'] ?? ''),
+            'two_factor' => $this->s->auth->twoFactorEnabled(), 'admin_path' => $cfg->adminPath,
         ];
     }
 }

@@ -118,7 +118,7 @@ final class Summary
             $blocks[] = $files > 0 ? sprintf('Файлы: %d (придут следом в этот чат)', $files) : 'Файлы: не приложены';
         }
         $blocks[] = $this->sourceBlock($p['source'] ?? []);
-        $blocks[] = sprintf('Карточка: %s/admin#lead-%d', $this->cfg->baseUrl, $lead['id']);
+        $blocks[] = sprintf('Карточка: %s%s#lead-%d', $this->cfg->baseUrl, $this->cfg->adminPath, $lead['id']);
         return implode("\n\n", array_filter($blocks, static fn($b) => $b !== ''));
     }
 

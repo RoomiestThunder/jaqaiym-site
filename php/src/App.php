@@ -34,14 +34,15 @@ final class App
 
     private function dispatch(string $method, string $path, PublicApi $pub, AdminController $admin): void
     {
+        $adminUrl = preg_quote($this->cfg->adminPath, '#'); // /admin или непубличный /admin/<секрет> из ADMIN_PATH
         $routes = [
             ['GET', '#^/api/health$#', fn() => Http::json(200, ['ok' => true])],
             ['POST', '#^/api/leads$#', fn() => $pub->leads()],
             ['POST', '#^/api/attachments$#', fn() => $pub->upload()],
             ['POST', '#^/api/tg/webhook$#', fn() => $pub->webhook()],
-            ['GET', '#^/admin/?$#', fn() => $admin->page()],
-            ['POST', '#^/admin/login$#', fn() => $admin->login()],
-            ['POST', '#^/admin/logout$#', fn() => $admin->logout()],
+            ['GET', '#^' . $adminUrl . '/?$#', fn() => $admin->page()],
+            ['POST', '#^' . $adminUrl . '/login$#', fn() => $admin->login()],
+            ['POST', '#^' . $adminUrl . '/logout$#', fn() => $admin->logout()],
             ['GET', '#^/api/admin/leads$#', fn() => $admin->leadsJson()],
             ['POST', '#^/api/admin/leads/(\d+)/status$#', fn(array $m) => $admin->setStatus((int)$m[1])],
             ['POST', '#^/api/admin/leads/(\d+)/resend$#', fn(array $m) => $admin->resend((int)$m[1])],

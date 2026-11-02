@@ -12,7 +12,7 @@ final class AdminPage
         . '.tag{background:#eadfce;border-radius:99px;padding:2px 10px;font-size:12px}select{margin-left:auto;padding:6px}.s{font-size:16px;white-space:pre-line}'
         . '.f a,.f .gone{display:inline-block;margin:0 10px 6px 0;background:#f5efe3;padding:4px 10px;border-radius:8px;color:#2e1a10}.f .gone{color:#8a7a6c}'
         . '.m{color:#8a7a6c;font-size:13px}code{background:#f5efe3;padding:1px 5px;border-radius:5px}button{cursor:pointer;margin-left:6px}ul{margin:6px 0;padding-left:20px}'
-        . '.top{display:flex;justify-content:space-between;align-items:center}.err{color:#a3261b}.ok{color:#2b7a3d}.bad{color:#a3261b}input[type=password]{padding:8px;width:100%;box-sizing:border-box;margin:8px 0}';
+        . '.top{display:flex;justify-content:space-between;align-items:center}.err{color:#a3261b}.ok{color:#2b7a3d}.bad{color:#a3261b}input[type=password],input[name=code]{padding:8px;width:100%;box-sizing:border-box;margin:8px 0}';
 
     private static function e(mixed $s): string
     {
@@ -27,15 +27,17 @@ final class AdminPage
             . ($script !== '' ? '<script nonce="' . self::e($nonce) . '">' . $script . '</script>' : '');
     }
 
-    public static function login(string $nonce, ?string $error, bool $enabled): string
+    /** @param ?string $disabled причина отключения админки (null: включена); $totp: запрашивать ли одноразовый код */
+    public static function login(string $nonce, ?string $error, ?string $disabled, string $action, bool $totp): string
     {
         $body = '<div class="box"><h1>JAQAIYM: вход для команды</h1>';
-        if (!$enabled) {
-            $body .= '<p class="err">Админка отключена: в config.env не задан ADMIN_TOKEN (не короче ' . Config::MIN_ADMIN_SECRET . ' символов).</p></div>';
+        if ($disabled !== null) {
+            $body .= '<p class="err">Админка отключена: ' . self::e($disabled) . '.</p></div>';
         } else {
+            $code = $totp ? '<label>Код из приложения-аутентификатора<input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required></label>' : '';
             $body .= ($error !== null ? '<p class="err">' . self::e($error) . '</p>' : '')
-                . '<form method="post" action="/admin/login"><label>Пароль<input type="password" name="password" autocomplete="current-password" autofocus required></label>'
-                . '<button type="submit">Войти</button></form></div>';
+                . '<form method="post" action="' . self::e($action) . '"><label>Пароль<input type="password" name="password" autocomplete="current-password" autofocus required></label>'
+                . $code . '<button type="submit">Войти</button></form></div>';
         }
         return self::shell('Вход: JAQAIYM', $nonce, $body);
     }
@@ -46,7 +48,7 @@ final class AdminPage
     public static function dashboard(array $c, string $nonce): string
     {
         $cards = array_map(fn(array $l) => self::card($l, $c['status']), $c['leads']);
-        $body = '<div class="top"><h1>Заявки (' . count($cards) . ')</h1><button data-act="/admin/logout">Выйти</button></div>'
+        $body = '<div class="top"><h1>Заявки (' . count($cards) . ')</h1><button data-act="' . self::e($c['logout_url']) . '">Выйти</button></div>'
             . self::telegram($c['tg'], $c['diag'])
             . ($cards ? implode('', $cards) : '<p>Заявок пока нет.</p>')
             . self::diag($c['diag']);
@@ -159,6 +161,8 @@ final class AdminPage
             . ($d['post_ok'] ? '' : '<br><b class="bad">post_max_size меньше ' . ($d['max_file_mb'] + 1) . ' МБ: фото крупнее лимита не загрузятся. Увеличьте в настройках PHP (Plesk → PHP).</b>')
             . '<br>Данные вне корня сайта: <b class="' . ($d['outside'] ? 'ok">да' : 'bad">НЕТ') . '</b>'
             . '<br>Свободно на диске: ' . sprintf('%.0f', $d['free'] / 1048576) . ' МБ'
+            . '<br>Вход: ' . ($d['two_factor'] ? '<b class="ok">пароль и одноразовый код (2FA включена)</b>' : '<b class="bad">только пароль: включите 2FA (ADMIN_TOTP_SECRET)</b>')
+            . ' · адрес админки: ' . ($d['admin_path'] === '/admin' ? '<b class="bad">стандартный /admin (смените ADMIN_PATH)</b>' : '<b class="ok">нестандартный</b>')
             . '<br>Ваш адрес по данным сервера: <b>' . self::e($d['client_ip']) . '</b> (REMOTE_ADDR ' . self::e($d['remote_addr']) . '). Если здесь адрес самого сервера, лимиты запросов считаются на всех посетителей вместе.</p></section>';
     }
 }

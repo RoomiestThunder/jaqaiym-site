@@ -4,7 +4,8 @@
   python3 tools/test_php_security.py
 
   1 админка закрыта без входа, подделка и просрочка cookie, старый вход «токеном в адресе» не работает
-  2 вход: неверный пароль, перебор (блокировка), флаги cookie, отключённая и слабая админка
+  2 вход: неверный пароль, перебор (только неудачи и по адресу, IPv6 по /64), флаги cookie, отключённая и слабая админка;
+    одноразовые коды TOTP (эталоны RFC 6238), 2FA, непубличный адрес админки, серверный выход
   3 защита от подделки запросов (CSRF + Origin)
   4 загрузки: чужие типы, имена с путями и переводами строк, размер, лимит частоты, права на файлы
   5 приём заявок: кривые типы вместо 500, SQL-инъекции, XSS в админке, подделка строк в Telegram, приманка, повторы
@@ -60,7 +61,7 @@ def php_errors(S):
 def forge_cookie(admin, bot, exp, name='jq_admin'):
     """Подпись cookie по тем же правилам, что в Auth.php (проверяет и просрочку, и подмену)."""
     key = hmac.new((admin + '|' + bot).encode(), b'session', hashlib.sha256).hexdigest()
-    sig = base64.urlsafe_b64encode(hmac.new(key.encode(), ('s|%d' % exp).encode(), hashlib.sha256).digest()).rstrip(b'=').decode()
+    sig = base64.urlsafe_b64encode(hmac.new(key.encode(), ('s|%d|0' % exp).encode(), hashlib.sha256).digest()).rstrip(b'=').decode()  # «0» — поколение входов (меняется при выходе)
     return '%s=%d.%s' % (name, exp, sig)
 
 
@@ -111,6 +112,95 @@ def section_login(A, B, C, D):
     st, _, body = C.raw('GET', '/admin')
     check(st == 503 and 'отключена' in body.decode(), 'слабый пароль (короче 16): админка отключена, 503')
     check(C.login('short')[0] == 503 and C.req('/api/admin/leads')[0] == 403, 'и войти нельзя даже с этим паролем')
+    check(B.login(xff='203.0.113.77')[0] == 303, 'пока один адрес заблокирован, остальные входят свободно: «запереть» владельца нельзя')
+    check(all(A.login(xff='203.0.113.78')[0] == 303 for _ in range(10)), 'успешные входы не считаются: 10 подряд проходят')
+    v6 = ['2001:db8:aaaa:1::%x' % i for i in range(1, 9)]
+    check([D.login('wrong-%d' % i, xff=a)[0] for i, a in enumerate(v6)] == [401] * 8 and D.login(xff='2001:db8:aaaa:1::99')[0] == 429,
+          'IPv6: адреса одной сети /64 делят один счётчик попыток (9-я с другого адреса той же сети: 429)')
+    check(D.login(xff='2001:db8:aaaa:2::1')[0] == 303, 'а адрес из другой сети /64 не затронут')
+
+
+TOTP_KEY = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'
+SECRET_PATH = '/admin/test-secret-path-1'
+RFC_KEY = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'  # ASCII «12345678901234567890» в base32: ключ из приложения к RFC 6238
+RFC_VECTORS = {59: '287082', 1111111109: '081804', 1111111111: '050471', 1234567890: '005924', 2000000000: '279037', 20000000000: '353130'}
+
+
+def php_eval(code):
+    boot = os.path.join(H.dist(), 'jaqaiym-private', 'src', 'bootstrap.php')
+    return subprocess.run(['php', '-r', 'require %s; %s' % (json.dumps(boot), code)], capture_output=True, text=True).stdout.strip()
+
+
+def section_totp_unit():
+    print('2b. одноразовые коды (TOTP): эталонные векторы RFC 6238 и правила проверки')
+    table = '[' + ','.join('%d=>"%s"' % (t, c) for t, c in RFC_VECTORS.items()) + ']'
+    out = php_eval('foreach (%s as $t => $c) { echo \\Jq\\Totp::code("%s", intdiv($t, 30)) === $c ? "ok " : "FAIL$t "; }' % (table, RFC_KEY))
+    check(out.split() == ['ok'] * 6, 'PHP-реализация выдаёт эталонные коды RFC 6238 (6 из 6): %s' % out)
+    check(all(H.totp_code(RFC_KEY, t) == c for t, c in RFC_VECTORS.items()), 'независимая реализация в тестах совпадает с теми же эталонами')
+    now = 1700000000
+    cur = now // 30
+    c = lambda s: H.totp_code(TOTP_KEY, s * 30)
+    verify = lambda code, last=0: "var_export(\\Jq\\Totp::verify('%s', '%s', %d, %d), true)" % (TOTP_KEY, code, now, last)
+    cases = [c(cur - 1), c(cur), c(cur + 1), c(cur - 2), c(cur + 2), '%s %s' % (c(cur)[:3], c(cur)[3:]), '12345', 'abcdef', '1234567', '']
+    out = php_eval('echo implode(" ", [%s]);' % ', '.join(verify(x) for x in cases))
+    check(out.split() == [str(cur - 1), str(cur), str(cur + 1), 'NULL', 'NULL', str(cur), 'NULL', 'NULL', 'NULL', 'NULL'],
+          'допуск ±1 шаг на часы, коды за пределами, неверный формат и пустой код не проходят: %s' % out)
+    out = php_eval('echo %s, " ", %s;' % (verify(c(cur), cur), verify(c(cur), cur - 1)))
+    check(out == 'NULL %d' % cur, 'один код нельзя использовать дважды: шаг, не больший последнего принятого, отвергается')
+    out = php_eval('$s = \\Jq\\Totp::normalize("jbsw y3dp-ehpk 3pxp=="); echo $s, " ", var_export(\\Jq\\Totp::isValidSecret($s), true), " ", var_export(\\Jq\\Totp::isValidSecret("SHORT"), true), " ", var_export(\\Jq\\Totp::isValidSecret("JBSWY3DPEHPK3PX1"), true), " ", strlen(\\Jq\\Totp::newSecret());')
+    check(out == 'JBSWY3DPEHPK3PXP true false false 32', 'ключ с пробелами, дефисами и строчными буквами нормализуется; слишком короткий и с недопустимыми символами отвергаются: %s' % out)
+    import make_2fa
+    secret, path = make_2fa.new_secret(), make_2fa.new_admin_path()
+    now = int(time.time())
+    out = php_eval('echo var_export(\\Jq\\Totp::verify(\\Jq\\Totp::normalize("%s"), "%s", %d) !== null, true);' % (make_2fa.grouped(secret).lower(), H.totp_code(secret, now), now))
+    check(out == 'true' and re.fullmatch(r'/admin/[A-Za-z0-9_-]{8,64}', path), 'ключ из tools/make_2fa.py (в записи с пробелами) принимается сервером, адрес подходит под правило ADMIN_PATH')
+
+
+def wait_for_safe_window():
+    """Коды живут по 30 секунд: начинаем в начале шага, чтобы граница шага не пришлась на середину проверок."""
+    t = time.time() % 30
+    if t > 9:
+        time.sleep(30 - t + 1)
+
+
+def section_2fa(G, bad_totp, bad_path):
+    print('2c. двухфакторный вход, непубличный адрес админки, выход')
+    P = G.admin_path
+    form = {'Content-Type': 'application/x-www-form-urlencoded'}
+    check(G.raw('GET', '/admin')[0] == 404 and G.raw('POST', '/admin/login', 'password=x', form)[0] == 404, 'стандартный адрес /admin при заданном ADMIN_PATH не отвечает (404)')
+    st, _, body = G.raw('GET', P)
+    html = body.decode()
+    check(st == 200 and 'name="code"' in html and ('action="%s/login"' % P) in html, 'на секретном адресе форма входа с полем кода и верным адресом отправки')
+    wait_for_safe_window()
+    me = '198.51.100.20'
+    check(G.login(code='', xff=me)[0] == 401, 'только пароль без кода: 401')
+    check(G.login(code='000000', xff=me)[0] == 401, 'верный пароль и неверный код: 401')
+    check(G.login(password='wrong-password', xff=me)[0] == 401, 'неверный пароль при верном коде: 401')
+    st, cookie, header = G.login(xff=me, step_offset=-1)
+    check(st == 303 and cookie and 'httponly' in header.lower(), 'верный пароль и верный код (допускается код прошлого шага): вход, и код не «сгорел» от неудачной попытки с чужим паролем')
+    check(G.login(xff=me, step_offset=-1)[0] == 401, 'тот же код второй раз: 401 (повтор отвергается)')
+    st, cookie, _ = G.login(xff=me)
+    check(st == 303 and cookie, 'код текущего шага (он позже прежнего) принимается')
+    check(G.login(xff=me, step_offset=-1)[0] == 401 and G.login(xff=me, step_offset=-3)[0] == 401 and G.login(xff=me, step_offset=3)[0] == 401,
+          'код уже использованного или слишком старого/будущего шага отвергается')
+    st, _, body = G.raw('GET', P, headers={'Cookie': cookie})
+    dash = body.decode()
+    check(st == 200 and ('data-act="%s/logout"' % P) in dash, 'после входа панель открывается, «Выйти» ведёт на секретный адрес')
+    check('2FA включена' in dash and 'нестандартный' in dash, 'в диагностике: 2FA включена, адрес нестандартный')
+    csrf = re.search(rb'var csrf="([0-9a-f]+)"', body).group(1).decode()
+    check(G.raw('GET', '/api/admin/leads', headers={'Cookie': cookie})[0] == 200, 'cookie действует до выхода')
+    check(G.admin_post(P + '/logout', cookie, csrf)[0] == 200, 'выход выполняется')
+    check(G.raw('GET', '/api/admin/leads', headers={'Cookie': cookie})[0] == 403 and G.raw('GET', P, headers={'Cookie': cookie})[2].decode().count('name="code"') == 1,
+          'после выхода прежняя cookie больше не действует (выход серверный, а не только на стороне браузера)')
+    lid = G.lead()
+    log = os.path.join(G.dir, 'outbox.log')
+    check(H.T.wait(lambda: os.path.exists(log) and ('Карточка: http://127.0.0.1:8147%s#lead-%d' % (P, lid)) in open(log, encoding='utf-8').read()), 'ссылка на карточку в сообщении ведёт на секретный адрес')
+    them = '198.51.100.30'
+    check([G.login(code='111111', xff=them)[0] for _ in range(8)] == [401] * 8 and G.login(xff=them, step_offset=1)[0] == 429, 'неверные коды считаются как неудачные попытки: после 8 вход с этого адреса закрыт (429) даже с верным кодом')
+    st, _, body = bad_totp.raw('GET', '/admin')
+    check(st == 503 and 'ADMIN_TOTP_SECRET' in body.decode() and bad_totp.login(code='')[0] == 503, 'неверный ключ 2FA в config.env: админка отключена (503), а не работает без второго фактора')
+    st, _, body = bad_path.raw('GET', '/admin')
+    check(st == 503 and 'ADMIN_PATH' in body.decode(), 'неверный ADMIN_PATH: админка отключена (503) с понятной причиной')
 
 
 def section_csrf(A):
@@ -332,9 +422,14 @@ def main():
     C = H.PhpSrv(8143, cron=False, ADMIN_TOKEN='short')
     D = H.PhpSrv(8144, cron=False, PUBLIC_BASE_URL='https://jaqaiym.test')
     E = H.PhpSrv(8145, TELEGRAM_BOT_TOKEN=BOT, TELEGRAM_CHAT_ID='111', TELEGRAM_API_BASE='http://127.0.0.1:9')
+    G = H.PhpSrv(8147, cron=False, ADMIN_TOTP_SECRET=TOTP_KEY, ADMIN_PATH=SECRET_PATH)
+    X1 = H.PhpSrv(8148, cron=False, ADMIN_TOTP_SECRET='not a valid key!!')
+    X2 = H.PhpSrv(8149, cron=False, ADMIN_PATH='/secret')
     try:
         section_admin_closed(A)
         section_login(A, B, C, D)
+        section_totp_unit()
+        section_2fa(G, X1, X2)
         section_csrf(A)
         section_uploads(A, B)
         section_leads(A, F, B)
@@ -343,7 +438,7 @@ def main():
         section_retention(F)
         section_static()
     finally:
-        for s in (A, B, C, D, E, F):
+        for s in (A, B, C, D, E, F, G, X1, X2):
             s.stop()
         httpd.shutdown()
         H.drop_dist()

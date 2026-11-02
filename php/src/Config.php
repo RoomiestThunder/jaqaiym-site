@@ -31,6 +31,9 @@ final class Config
         public readonly float $retryBase,
         public readonly float $orphanHours,
         public readonly float $unsentDays,
+        public readonly string $adminPath,
+        public readonly string $adminTotpSecret,
+        public readonly ?string $adminProblem,
     ) {
     }
 
@@ -63,12 +66,37 @@ final class Config
             $env->num('TG_RETRY_BASE_SECONDS', 60),
             $env->num('ORPHAN_HOURS', 24),
             $env->num('UNSENT_FILE_DAYS', 7),
+            ...self::adminSettings($env, $admin),
         );
+    }
+
+    /**
+     * Адрес админки, ключ двухфакторного входа и причина отключения админки, если настройки неверны.
+     * Неверное значение никогда не «молча» ослабляет защиту: админка просто не включается.
+     * @return array{0:string,1:string,2:?string}
+     */
+    private static function adminSettings(Env $env, string $adminSecret): array
+    {
+        $problem = null;
+        if (strlen($adminSecret) < self::MIN_ADMIN_SECRET) {
+            $problem = 'в config.env не задан ADMIN_TOKEN (не короче ' . self::MIN_ADMIN_SECRET . ' символов)';
+        }
+        $path = $env->str('ADMIN_PATH', '/admin');
+        if (preg_match('~\A/admin(/[A-Za-z0-9_-]{8,64})?\z~', $path) !== 1) {
+            $problem ??= 'ADMIN_PATH задан неверно (нужен вид /admin/ЗНАЧЕНИЕ из 8–64 букв, цифр, - и _)';
+            $path = '/admin';
+        }
+        $totp = Totp::normalize($env->str('ADMIN_TOTP_SECRET'));
+        if ($totp !== '' && !Totp::isValidSecret($totp)) {
+            $problem ??= 'ADMIN_TOTP_SECRET задан неверно (нужен ключ из 16 и более символов A–Z и 2–7)';
+            $totp = '';
+        }
+        return [$path, $totp, $problem];
     }
 
     public function adminEnabled(): bool
     {
-        return strlen($this->adminSecret) >= self::MIN_ADMIN_SECRET;
+        return $this->adminProblem === null;
     }
 
     public function https(): bool
