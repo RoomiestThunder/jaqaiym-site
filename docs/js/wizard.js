@@ -77,7 +77,14 @@
   let st = load();
   if (!S.city[st.city]) st.city = null;
   let saveT;
-  const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { try { st.savedAt = Date.now(); localStorage.setItem(KEY, JSON.stringify(Object.assign({}, st, { files: st.files.filter(f => f.status === 'ok').map(f => ({ key: f.key, id: f.id, name: f.name, size: f.size, mime: f.mime, status: 'ok' })) }))); } catch (_) {} }, 150); };
+  // в черновик попадают только успешно загруженные файлы и только их описание (сами файлы остаются на устройстве и на сервере)
+  const savedFiles = () => st.files.filter(f => f.status === 'ok').map(f => ({ key: f.key, id: f.id, name: f.name, size: f.size, mime: f.mime, status: 'ok' }));
+  const save = () => {
+    clearTimeout(saveT);
+    saveT = setTimeout(() => {
+      try { st.savedAt = Date.now(); localStorage.setItem(KEY, JSON.stringify(Object.assign({}, st, { files: savedFiles() }))); } catch (_) {}
+    }, 150);
+  };
   const contact = (() => { try { return JSON.parse(sessionStorage.getItem('jq_contact')) || {}; } catch (_) { return {}; } })();
   const C = Object.assign({ name: '', phone: '', channel: 'whatsapp', time: '', email: '', company: '', role: '' }, contact);
   let consent = false, busy = false, returnTo4 = false, doneNo = null, sendError = '';
@@ -90,6 +97,8 @@
 
   // параметры из ссылки подставляются, но клиент может изменить
   const src = JQ.sourceInfo(), qs = new URLSearchParams(location.search);
+  // ссылка на другой тип заказа начинает анкету заново: ответы прежнего черновика к нему не относятся
+  if (qs.get('category') && st.category && qs.get('category') !== st.category) st = fresh();
   if (qs.get('category') && S.category[qs.get('category')]) st.category = qs.get('category');
   if (qs.get('project_id') && PROJECTS[qs.get('project_id')]) { st.projectId = qs.get('project_id'); if (!qs.get('category')) st.category = st.category || PROJECTS[st.projectId].category; }
   else if (qs.get('project_id')) st.projectId = String(qs.get('project_id')).slice(0, 60);
@@ -101,9 +110,24 @@
     return `<button type="button" class="opt ${o.cls || ''}" data-f="${field}" data-v="${val}"${o.multi ? ' data-m="1"' : ''}${o.req ? ' data-r="1"' : ''} aria-pressed="${on}">${o.vis ? `<span class="v">${o.vis}</span>` : ''}<span class="t">${esc(label)}</span></button>`;
   };
   const optsFrom = (field, dict, o = {}) => Object.keys(dict).filter(k => !k.startsWith('_')).map(k => opt(field, k, dict[k], Object.assign({}, o, { vis: o.vis ? o.vis(k) : null }))).join('');
-  const chip = (field, val, label, o = {}) => { const cur = getPath(field), on = o.multi ? (cur || []).includes(val) : cur === val; return `<button type="button" class="chip" data-f="${field}" data-v="${val}"${o.multi ? ' data-m="1"' : ''}${o.req ? ' data-r="1"' : ''} aria-pressed="${on}">${esc(label)}</button>`; };
-  const q = (id, title, hint, body, o = {}) => `<div class="q${hasErr(id) ? ' err' : ''}" id="q-${id}" role="group" aria-labelledby="qh-${id}"><h3 id="qh-${id}">${title}${o.req ? ' <em title="' + esc(t('wz.required')) + '">*</em>' : ''}</h3>${hint ? `<p class="hint">${hint}</p>` : ''}${body}<div class="emsg" role="alert">${esc(errs[id] || '')}</div></div>`;
-  const input = (bind, label, o = {}) => `<label class="field${hasErr(bind) ? ' err' : ''}" data-b="${bind}"><span>${label}${o.req ? ' <em class="rq">*</em>' : ''}${o.opt ? ' <i>— ' + t('wz.optional') + '</i>' : ''}</span>${o.area ? `<textarea class="inp" data-bind="${bind}" rows="${o.rows || 3}" maxlength="${o.max || 2000}" placeholder="${esc(o.ph || '')}">${esc(o.val)}</textarea>` : `<input class="inp" data-bind="${bind}" value="${esc(o.val)}" placeholder="${esc(o.ph || '')}" maxlength="${o.max || 150}" autocomplete="off">`}<div class="emsg" role="alert">${esc(errs[bind] || '')}</div></label>`;
+  const chip = (field, val, label, o = {}) => {
+    const cur = getPath(field), on = o.multi ? (cur || []).includes(val) : cur === val;
+    const flags = (o.multi ? ' data-m="1"' : '') + (o.req ? ' data-r="1"' : '');
+    return `<button type="button" class="chip" data-f="${field}" data-v="${val}"${flags} aria-pressed="${on}">${esc(label)}</button>`;
+  };
+  const q = (id, title, hint, body, o = {}) => {
+    const mark = o.req ? ' <em title="' + esc(t('wz.required')) + '">*</em>' : '';
+    const hintHtml = hint ? `<p class="hint">${hint}</p>` : '';
+    return `<div class="q${hasErr(id) ? ' err' : ''}" id="q-${id}" role="group" aria-labelledby="qh-${id}"><h3 id="qh-${id}">${title}${mark}</h3>${hintHtml}${body}<div class="emsg" role="alert">${esc(errs[id] || '')}</div></div>`;
+  };
+  const input = (bind, label, o = {}) => {
+    const req = o.req ? ' <em class="rq">*</em>' : '';
+    const optional = o.opt ? ' <i>— ' + t('wz.optional') + '</i>' : '';
+    const control = o.area
+      ? `<textarea class="inp" data-bind="${bind}" rows="${o.rows || 3}" maxlength="${o.max || 2000}" placeholder="${esc(o.ph || '')}">${esc(o.val)}</textarea>`
+      : `<input class="inp" data-bind="${bind}" value="${esc(o.val)}" placeholder="${esc(o.ph || '')}" maxlength="${o.max || 150}" autocomplete="off">`;
+    return `<label class="field${hasErr(bind) ? ' err' : ''}" data-b="${bind}"><span>${label}${req}${optional}</span>${control}<div class="emsg" role="alert">${esc(errs[bind] || '')}</div></label>`;
+  };
   const catImg = n => `<img src="${JQ.asset('/img/work/' + n + '.jpg')}" alt="" loading="lazy">`;
   const catVis = k => ({ kitchen: catImg('k-1'), wardrobe: catImg('w-2'), other_furniture: catImg('h-1'), business: catImg('lobby-1'), other: ICON.other }[k]);
   const fmtSize = b => { const n = b > 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' ' + t('file.mb') : Math.max(1, Math.round(b / 1024)) + ' ' + t('file.kb'); return n; };
@@ -151,7 +175,11 @@
 
   const dimFields = () => st.category === 'kitchen' ? DIMS[st.layout || 'unknown'].map(([k, tk]) => [k, t(tk)]) : [['width', t('d.width')], ['height', t('d.height')], ['depth', t('d.depth')]];
   const hasDims = () => ['kitchen', 'wardrobe', 'other_furniture'].includes(st.category);
-  const dimField = (key, label) => { const path = 'dims.' + key; return `<label class="field${hasErr(path) ? ' err' : ''}" data-b="${path}"><span>${label}</span><span class="unit"><input class="inp" data-bind="${path}" value="${esc(st.dims[key])}" inputmode="decimal" placeholder="${esc(t('d.ph'))}" maxlength="6" autocomplete="off"></span><div class="emsg" role="alert">${esc(errs[path] || '')}</div></label>`; };
+  const dimField = (key, label) => {
+    const path = 'dims.' + key;
+    const control = `<input class="inp" data-bind="${path}" value="${esc(st.dims[key])}" inputmode="decimal" placeholder="${esc(t('d.ph'))}" maxlength="6" autocomplete="off">`;
+    return `<label class="field${hasErr(path) ? ' err' : ''}" data-b="${path}"><span>${label}</span><span class="unit">${control}</span><div class="emsg" role="alert">${esc(errs[path] || '')}</div></label>`;
+  };
 
   function dimsBlock() {
     if (!hasDims()) return '';
@@ -202,7 +230,14 @@
     rows.push([t('sum.city'), esc(L.city[st.city] || '—'), 1]);
     const w = [];
     if (st.style.length) w.push(t('sum.style', { v: lblList('style', st.style).toLowerCase() }));
-    if (c === 'kitchen') { const f = []; [['upper', 'sum.with.upper'], ['island', 'sum.with.island'], ['appliances', 'sum.with.appliances']].forEach(([k, tk]) => { if (st.kf[k] === 'yes') f.push(t(tk)); else if (st.kf[k] === 'no') f.push(t('sum.without', { v: t(tk) })); }); if (f.length) w.push(f.join(', ')); }
+    if (c === 'kitchen') {
+      const f = [];
+      [['upper', 'sum.with.upper'], ['island', 'sum.with.island'], ['appliances', 'sum.with.appliances']].forEach(([k, tk]) => {
+        if (st.kf[k] === 'yes') f.push(t(tk));
+        else if (st.kf[k] === 'no') f.push(t('sum.without', { v: t(tk) }));
+      });
+      if (f.length) w.push(f.join(', '));
+    }
     if (c === 'wardrobe') { if (st.doors.length) w.push(t('sum.doors', { v: lblList('doors', st.doors).toLowerCase() })); if (st.storage.length) w.push(t('sum.storage', { v: lblList('storage', st.storage).toLowerCase() })); }
     if (c === 'other_furniture' && st.purposes.length) w.push(t('sum.purposes', { v: lblList('purpose', st.purposes).toLowerCase() }));
     if (c === 'business') { if (st.bizType) w.push(t('sum.object', { v: st.bizType })); if (st.bizTask) w.push(t('sum.task', { v: st.bizTask })); }
@@ -223,7 +258,12 @@
   function step4() {
     const rows = summaryRows().map(([tt, v, s]) => `<div class="sr"><b>${tt}</b><div>${v}</div><button class="edit" type="button" data-act="edit" data-step="${s}">${t('sum.edit')}</button></div>`).join('');
     const biz = st.category === 'business';
-    const fld = (id, label, inner, o = {}) => `<label class="field${o.full ? ' full' : ''}${hasErr(id) ? ' err' : ''}" data-b="${id}"><span>${label}${o.req ? ' <em class="rq">*</em>' : ''}${o.opt ? ' <i>— ' + t('wz.optional') + '</i>' : ''}</span>${inner}<div class="emsg" role="alert">${esc(errs[id] || '')}</div></label>`;
+    const fld = (id, label, inner, o = {}) => {
+      const cls = (o.full ? ' full' : '') + (hasErr(id) ? ' err' : '');
+      const req = o.req ? ' <em class="rq">*</em>' : '';
+      const optional = o.opt ? ' <i>— ' + t('wz.optional') + '</i>' : '';
+      return `<label class="field${cls}" data-b="${id}"><span>${label}${req}${optional}</span>${inner}<div class="emsg" role="alert">${esc(errs[id] || '')}</div></label>`;
+    };
     let h = `<h1 class="wz-h">${t('s4.h')}</h1><p class="wz-sub">${t('s4.sub')}</p><div class="sum">${rows}</div>`;
     h += `<div class="q" id="q-contact"><h3>${t('c.h')}</h3><div class="cform" style="margin-top:16px">
       ${fld('c.name', t('c.name'), `<input class="inp" data-c="name" value="${esc(C.name)}" autocomplete="name" maxlength="100">`, { req: 1 })}
@@ -278,24 +318,42 @@
 
   // ---------------- обязательные поля ----------------
   function dimNum(v) { const n = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isNaN(n) ? null : n; }
+  // Какие ответы обязательны для каждого типа заказа, написано в schema.json (S.required): те же правила проверяет сервер.
+  // Здесь только то, где ответ лежит в анкете: шаг, блок для подсветки ошибки, значение и текст ошибки.
+  const trimmed = s => String(s == null ? '' : s).trim();
+  const REQ = {
+    premise: { step: 1, id: 'premise', get: () => st.premise, msg: 'e.pick' },
+    layout: { step: 1, id: 'layout', get: () => st.layout, msg: 'e.pick' },
+    wardrobe_kind: { step: 1, id: 'wardrobeKind', get: () => st.wardrobeKind, msg: 'e.pick' },
+    business_scope: { step: 1, id: 'businessScope', get: () => st.businessScope, msg: 'e.pick' },
+    style_preferences: { step: 2, id: 'style', get: () => st.style, msg: 'e.pickmany' },
+    upper_cabinets: { step: 2, id: 'kf.upper', get: () => st.kf.upper, msg: 'e.pick', group: 'kitchen' },
+    island: { step: 2, id: 'kf.island', get: () => st.kf.island, msg: 'e.pick', group: 'kitchen' },
+    built_in_appliances: { step: 2, id: 'kf.appliances', get: () => st.kf.appliances, msg: 'e.pick', group: 'kitchen' },
+    door_type: { step: 2, id: 'doors', get: () => st.doors, msg: 'e.pickmany' },
+    storage_priorities: { step: 2, id: 'storage', get: () => st.storage, msg: 'e.pickmany' },
+    purposes: { step: 2, id: 'purposes', get: () => st.purposes, msg: 'e.pickmany' },
+    object_type: { step: 2, id: 'bizType', get: () => trimmed(st.bizType), msg: 'e.fill' },
+    task: { step: 2, id: 'bizTask', get: () => trimmed(st.bizTask), msg: 'e.fill' },
+    quantity: { step: 3, id: 'bizQty', get: () => trimmed(st.bizQty), msg: 'e.fill' },
+    description: { step: 3, id: 'notes', get: () => trimmed(st.notes), msg: 'e.notes', min: 5 },
+  };
+  const isAnswered = (rule, v) => (Array.isArray(v) ? v.length > 0 : trimmed(v).length >= (rule.min || 1));
+  const requiredFor = category => {
+    const by = (S.required && S.required.by_category) || {};
+    return (by.all || []).concat(by[category] || []).map(k => REQ[k]).filter(Boolean);
+  };
+
   function check(n) {
     const e = {}, c = st.category;
     if (n === 1) {
       if (!c) e.category = t('e.pick');
-      else {
-        if (!st.premise) e.premise = t('e.pick');
-        if (c === 'kitchen' && !st.layout) e.layout = t('e.pick');
-        if (c === 'wardrobe' && !st.wardrobeKind) e.wardrobeKind = t('e.pick');
-        if (c === 'business' && !st.businessScope) e.businessScope = t('e.pick');
-      }
       if (!st.city) e.city = t('e.pick');
     }
-    if (n === 2) {
-      if (!st.style.length) e.style = t('e.pickmany');
-      if (c === 'kitchen') ['upper', 'island', 'appliances'].forEach(k => { if (!st.kf[k]) { e['kf.' + k] = 1; e.kitchen = t('e.pick'); } });
-      if (c === 'wardrobe') { if (!st.doors.length) e.doors = t('e.pickmany'); if (!st.storage.length) e.storage = t('e.pickmany'); }
-      if (c === 'other_furniture' && !st.purposes.length) e.purposes = t('e.pickmany');
-      if (c === 'business') { if (!st.bizType.trim()) e.bizType = t('e.fill'); if (!st.bizTask.trim()) e.bizTask = t('e.fill'); }
+    if (c) {
+      requiredFor(c).filter(r => r.step === n && !isAnswered(r, r.get())).forEach(r => {
+        if (r.group) { e[r.id] = 1; e[r.group] = t(r.msg); } else e[r.id] = t(r.msg);
+      });
     }
     if (n === 3) {
       if (hasDims() && !st.dimsUnknown) dimFields().forEach(([k]) => {
@@ -303,8 +361,6 @@
         if (v == null || String(v).trim() === '') { e['dims.' + k] = t('e.dimreq'); e.dims = t('e.dimreq'); }
         else if (!(num >= 10 && num <= 3000)) { e['dims.' + k] = t('e.dim'); e.dims = t('e.dim'); }
       });
-      if (c === 'business' && !st.bizQty.trim()) e.bizQty = t('e.fill');
-      if (c === 'other' && st.notes.trim().length < 5) e.notes = t('e.notes');
       if (st.files.some(f => f.status === 'uploading')) e.files = t('e.wait');
       else if (st.files.some(f => f.status === 'error')) e.files = t('e.badfiles');
     }
@@ -321,8 +377,7 @@
     Object.keys(errs).forEach(k => delete errs[k]);
     Object.assign(errs, check(n));
     if (!Object.keys(errs).length) return true;
-    const keep = document.activeElement && document.activeElement.id === 'next' ? null : null;
-    render(keep); scrollToError();
+    render(); scrollToError();
     return false;
   }
 

@@ -121,7 +121,7 @@
     const form = modal.querySelector('#qf'), phone = form.phone;
     phone.addEventListener('input', () => { phone.value = JQ.maskPhone(phone.value); phone.closest('.field').classList.remove('err'); });
     modal.addEventListener('click', e => { if (e.target === modal || e.target.classList.contains('qm-scroll') || e.target.closest('.qm-x') || e.target.closest('[data-close]')) close(); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.classList.contains('on')) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.classList.contains('on')) close(); trapTab(e); });
     let sid = JQ.uuid();
     form.addEventListener('submit', async e => {
       e.preventDefault();
@@ -151,6 +151,15 @@
       } catch (_) { err.textContent = t('qm.err.net'); err.classList.add('on'); JQ.track('request_failed', { type: 'network', lead: 'quick' }); }
       btn.disabled = false; btn.textContent = t('qm.submit');
     });
+  }
+  // Tab и Shift+Tab ходят по кругу внутри открытого окна и не уводят фокус на страницу под ним
+  function trapTab(e) {
+    if (e.key !== 'Tab' || !modal || !modal.classList.contains('on')) return;
+    const items = [...modal.querySelectorAll('button, a[href], input, textarea, select')].filter(el => !el.disabled && el.tabIndex >= 0 && el.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   }
   function open(context) {
     if (!modal) build();

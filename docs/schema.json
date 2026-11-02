@@ -126,5 +126,33 @@
       "image/webp",
       "application/pdf"
     ]
+  },
+  "required": {
+    "_note": "Какие ответы обязательны для каждого типа заказа. По этой таблице проверяют и сервер (PHP, Python), и анкета (wizard.js): правила лежат в одном месте. type: choice (одно значение из группы group), list (непустой список значений группы group), text (непустой текст, не короче min символов).",
+    "by_category": {
+      "all": ["premise", "style_preferences"],
+      "kitchen": ["layout", "upper_cabinets", "island", "built_in_appliances"],
+      "wardrobe": ["wardrobe_kind", "door_type", "storage_priorities"],
+      "other_furniture": ["purposes"],
+      "business": ["business_scope", "object_type", "task", "quantity"],
+      "other": ["description"]
+    },
+    "fields": {
+      "premise": {"in": "project", "type": "choice", "group": "premise", "msg": "Укажите, где будет стоять мебель"},
+      "style_preferences": {"in": "project", "type": "list", "group": "style", "msg": "Выберите внешний вид"},
+      "layout": {"in": "project", "type": "choice", "group": "kitchen_layout", "msg": "Укажите планировку кухни"},
+      "upper_cabinets": {"in": "features", "type": "choice", "group": "yes_no", "msg": "Ответьте про верхние шкафы"},
+      "island": {"in": "features", "type": "choice", "group": "yes_no", "msg": "Ответьте про остров"},
+      "built_in_appliances": {"in": "features", "type": "choice", "group": "yes_no", "msg": "Ответьте про встроенную технику"},
+      "wardrobe_kind": {"in": "project", "type": "choice", "group": "wardrobe_kind", "msg": "Укажите, какой шкаф нужен"},
+      "door_type": {"in": "features", "type": "list", "group": "doors", "msg": "Выберите тип дверей"},
+      "storage_priorities": {"in": "features", "type": "list", "group": "storage", "msg": "Выберите, что хранить внутри"},
+      "purposes": {"in": "features", "type": "list", "group": "purpose", "msg": "Укажите назначение мебели"},
+      "business_scope": {"in": "project", "type": "choice", "group": "business_scope", "msg": "Укажите, сколько объектов"},
+      "object_type": {"in": "features", "type": "text", "msg": "Укажите тип объекта"},
+      "task": {"in": "features", "type": "text", "msg": "Опишите задачу"},
+      "quantity": {"in": "features", "type": "text", "msg": "Укажите количество"},
+      "description": {"in": "project", "type": "text", "min": 5, "msg": "Опишите, что вы хотите сделать"}
+    }
   }
 }
