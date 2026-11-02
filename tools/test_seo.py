@@ -95,6 +95,11 @@ def section_open(web):
     check(all(os.path.exists(os.path.join(web, loc[len(URL) + 1:] or 'index.html')) or os.path.exists(os.path.join(web, loc[len(URL) + 1:], 'index.html')) for loc in locs),
           'sitemap.xml: каждый адрес соответствует существующей странице')
     check(all(len(n.getElementsByTagName('xhtml:link')) == 3 for n in doc.getElementsByTagName('url')), 'sitemap.xml: у каждой страницы три языковые ссылки (ru, kk, x-default)')
+    token = SITE['yandex_verification']
+    homes = [read(web, 'index.html'), read(web, 'kk/index.html')]
+    others = [read(web, p) for p in ('privacy.html', 'kk/privacy.html', 'request/index.html')]
+    check(all(tag(h, r'<meta name="yandex-verification" content="([^"]*)"') == [token] for h in homes) and not any('yandex-verification' in o for o in others),
+          'метатег подтверждения Яндекс Вебмастера только на главных страницах')
     ht = open(os.path.join(ROOT, 'php', 'httpdocs', '.htaccess'), encoding='utf-8').read()
     check('RewriteCond %{HTTP_HOST} ^www\\.(.+)$ [NC]' in ht and 'R=301' in ht, '.htaccess: адрес с www ведёт на основной домен постоянным перенаправлением')
 
@@ -118,6 +123,7 @@ def section_demo(tmp):
     check(all('rel="canonical"' not in h and 'application/ld+json' not in h and URL not in h for h in heads),
           'в <head> демо нет canonical, разметки и адресов боевого домена (демо не должно конкурировать с сайтом)')
     check(not os.path.exists(os.path.join(out, 'robots.txt')) and not os.path.exists(os.path.join(out, 'sitemap.xml')), 'в демо нет robots.txt и sitemap.xml')
+    check(not any('yandex-verification' in read(out, p) for p in pages), 'в демо нет метатега подтверждения прав (он только на боевом домене)')
 
 
 def main():

@@ -74,6 +74,8 @@ def head(site, i18n, lang, route, indexing):
     if indexing:
         tags.append('<meta name="robots" content="index, follow, max-image-preview:large">')
     if home:
+        if site.get('yandex_verification'):  # подтверждение прав на сайт в Яндекс Вебмастере (публичный токен)
+            tags.append(_meta('yandex-verification', site['yandex_verification'], 'name'))
         tags.append(structured_data(site, i18n, lang, site_url))
     return '\n'.join(tags)
 
