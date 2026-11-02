@@ -11,6 +11,19 @@ python3 -m py_compile server.py notifier.py render.py tools/*.py
 node --check public/js/common.js
 node --check public/js/wizard.js
 
+echo "== Файлы workflow разбираются как YAML (иначе GitHub не запустит CI)"
+python3 - <<'PY'
+import glob
+try:
+    import yaml
+except ImportError:
+    print('PyYAML не установлен: проверка пропущена')
+else:
+    for path in sorted(glob.glob('.github/workflows/*.yml')):
+        yaml.safe_load(open(path, encoding='utf-8'))
+        print('ок', path)
+PY
+
 echo "== Тексты (i18n) собраны из актуальных исходников"
 python3 tools/gen_i18n.py
 git diff --exit-code public/i18n
