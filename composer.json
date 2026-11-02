@@ -1,0 +1,17 @@
+{
+  "name": "jaqaiym/site",
+  "description": "Сайт и сервер заявок JAQAIYM (PHP-часть для общего хостинга ps.kz)",
+  "type": "project",
+  "license": "proprietary",
+  "require": {
+    "php": ">=8.1",
+    "ext-curl": "*",
+    "ext-mbstring": "*",
+    "ext-pdo_sqlite": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "Jq\\": "php/src/"
+    }
+  }
+}

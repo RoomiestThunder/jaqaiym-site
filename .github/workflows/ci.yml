@@ -1,0 +1,43 @@
+name: tests
+
+# Проверки на каждом изменении. PHP 8.3 (как на хостинге ps.kz): Ubuntu 24.04 ставит именно его.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: PHP и расширения
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y php-cli php-sqlite3 php-curl php-mbstring
+          php -v
+
+      - name: Синтаксис PHP, Python и JavaScript
+        run: |
+          find php -name '*.php' -print0 | xargs -0 -n1 php -l
+          python3 -m py_compile server.py notifier.py render.py tools/*.py
+          node --check public/js/common.js
+          node --check public/js/wizard.js
+
+      - name: Тексты (i18n) собраны из актуальных исходников
+        run: |
+          python3 tools/gen_i18n.py
+          git diff --exit-code public/i18n
+
+      - name: Тесты PHP-версии (приём, Telegram, повторы, очистка, правила схемы)
+        run: python3 tools/test_php.py
+
+      - name: Тесты безопасности PHP-версии
+        run: python3 tools/test_php_security.py
+
+      - name: Тесты версии на Python
+        run: python3 tools/test_telegram.py
