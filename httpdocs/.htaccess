@@ -1,0 +1,49 @@
+# JAQAIYM: правила для Apache на хостинге (Plesk). Лежит в корне сайта (httpdocs).
+# Код приложения, база и файлы заявок лежат ВНЕ корня сайта (папка jaqaiym-private) и отсюда недоступны.
+
+AddDefaultCharset UTF-8
+Options -Indexes -MultiViews
+DirectoryIndex index.html
+ServerSignature Off
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+# приём заявок, админку и вебхук Telegram обрабатывает единственный PHP-файл api/index.php
+RewriteCond %{REQUEST_URI} !^/api/index\.php$
+RewriteRule ^(api|admin)(/|$) /api/index.php [L]
+</IfModule>
+
+# На сайте нет других PHP-файлов: любые посторонние не исполняются и не отдаются
+<FilesMatch "\.(php|phtml|phar|inc)$">
+    Require all denied
+</FilesMatch>
+<Files "index.php">
+    Require all granted
+</Files>
+# скрытые файлы (.env, .git и т. п.) не отдаются никогда
+<FilesMatch "^\.(?!well-known)">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_headers.c>
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-Frame-Options "DENY"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+Header always set Cross-Origin-Opener-Policy "same-origin"
+# принуждает браузер ходить только по https (по http заголовок игнорируется); включайте, когда https уже работает
+Header always set Strict-Transport-Security "max-age=15552000"
+# страницы и скрипты проверяются при каждом заходе (дёшево, 304), чтобы после обновления сайта не оставалась старая версия
+<FilesMatch "\.(html|css|js|json)$">
+    Header set Cache-Control "no-cache"
+</FilesMatch>
+</IfModule>
+
+<IfModule mod_expires.c>
+ExpiresActive On
+ExpiresByType font/woff2 "access plus 1 year"
+ExpiresByType image/jpeg "access plus 30 days"
+ExpiresByType image/png "access plus 30 days"
+ExpiresByType image/webp "access plus 30 days"
+ExpiresByType image/svg+xml "access plus 30 days"
+</IfModule>
