@@ -45,8 +45,7 @@ final class AdminController
         if (!$this->s->auth->credentialsOk(self::postString('password'), self::postString('code'))) {
             $this->s->auth->loginFailed($ip);
             usleep(400000); // замедляет перебор
-            $hint = $this->s->auth->twoFactorEnabled() ? 'Неверный пароль или код. Каждый код действует один раз: дождитесь нового.' : 'Неверный пароль.';
-            Http::html(401, $this->loginPage($nonce, $hint));
+            Http::html(401, $this->loginPage($nonce, 'Неверный пароль или код. Каждый код действует один раз: дождитесь нового.'));
             return;
         }
         $this->s->auth->grant();
@@ -56,7 +55,7 @@ final class AdminController
     private function loginPage(string $nonce, ?string $error): string
     {
         $cfg = $this->s->cfg;
-        return AdminPage::login($nonce, $error, $cfg->adminProblem, $cfg->adminPath . '/login', $this->s->auth->twoFactorEnabled());
+        return AdminPage::login($nonce, $error, $cfg->adminProblem, $cfg->adminPath . '/login');
     }
 
     private static function postString(string $key): string
@@ -248,7 +247,7 @@ final class AdminController
             'outside' => !str_starts_with($data . '/', rtrim($pub, '/') . '/'),
             'free' => $this->s->files->freeBytes(), 'used' => $this->s->files->usedBytes(), 'quota' => $cfg->quotaBytes,
             'client_ip' => Http::ip(), 'remote_addr' => (string)($_SERVER['REMOTE_ADDR'] ?? ''),
-            'two_factor' => $this->s->auth->twoFactorEnabled(), 'admin_path' => $cfg->adminPath,
+            'admin_path' => $cfg->adminPath,
         ];
     }
 }

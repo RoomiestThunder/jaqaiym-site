@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Jq;
 
 /**
- * Вход в админку: пароль (ADMIN_TOKEN) и, если задан ADMIN_TOTP_SECRET, одноразовый код из приложения (TOTP).
+ * Вход в админку: пароль (ADMIN_TOKEN) и одноразовый код из приложения (TOTP, ключ ADMIN_TOTP_SECRET). Без ключа админка не включается.
  * Пароль не попадает ни в адрес, ни в сообщения Telegram: после входа выдаётся подписанная cookie
  * (HttpOnly, Secure на https, SameSite=Lax) на 12 часов. Смена ADMIN_TOKEN сразу делает все выданные cookie недействительными.
  *
@@ -33,11 +33,6 @@ final class Auth
         return rtrim(strtr(base64_encode(hash_hmac('sha256', $data, $this->cfg->key('session'), true)), '+/', '-_'), '=');
     }
 
-    public function twoFactorEnabled(): bool
-    {
-        return $this->cfg->adminTotpSecret !== '';
-    }
-
     public function loginBlocked(string $ip): bool
     {
         return $this->limiter->blocked('login_fail', $this->limiter->who($ip), self::LOGIN_FAILURES, self::LOGIN_WINDOW);
@@ -48,13 +43,10 @@ final class Auth
         $this->limiter->record('login_fail', $this->limiter->who($ip));
     }
 
-    /** Пароль и (если включена 2FA) код. Код принимается один раз и только после верного пароля. */
+    /** Пароль и код. Код принимается один раз и только после верного пароля. */
     public function credentialsOk(string $password, string $code): bool
     {
-        if (!$this->passwordOk($password)) {
-            return false;
-        }
-        return !$this->twoFactorEnabled() || $this->codeOk($code);
+        return $this->passwordOk($password) && $this->codeOk($code);
     }
 
     private function passwordOk(string $given): bool

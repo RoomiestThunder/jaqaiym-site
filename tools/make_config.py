@@ -53,6 +53,7 @@ def main():
     names = [line.split('=', 1)[0] for line in body.splitlines() if line and not line.startswith('#')]
     print('Создан %s (права %s). Переменные: %s' % (out, oct(stat.S_IMODE(os.stat(out).st_mode)), ', '.join(names)))
     print('Значения не показаны. Откройте файл на своём компьютере, сохраните ADMIN_TOKEN в менеджере паролей.')
+    print('Дальше запустите python3 tools/make_2fa.py: без ADMIN_TOTP_SECRET админка не включится.')
 
 
 if __name__ == '__main__':

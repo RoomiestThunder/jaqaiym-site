@@ -120,7 +120,7 @@ def section_login(A, B, C, D):
     check(D.login(xff='2001:db8:aaaa:2::1')[0] == 303, 'а адрес из другой сети /64 не затронут')
 
 
-TOTP_KEY = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'
+TOTP_KEY = H.TOTP_KEY
 SECRET_PATH = '/admin/test-secret-path-1'
 RFC_KEY = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'  # ASCII «12345678901234567890» в base32: ключ из приложения к RFC 6238
 RFC_VECTORS = {59: '287082', 1111111109: '081804', 1111111111: '050471', 1234567890: '005924', 2000000000: '279037', 20000000000: '353130'}
@@ -163,9 +163,10 @@ def wait_for_safe_window():
         time.sleep(30 - t + 1)
 
 
-def section_2fa(G, bad_totp, bad_path):
+def section_2fa(G, bad_totp, bad_path, no_totp):
     print('2c. двухфакторный вход, непубличный адрес админки, выход')
     P = G.admin_path
+    G.replay_check = True
     form = {'Content-Type': 'application/x-www-form-urlencoded'}
     check(G.raw('GET', '/admin')[0] == 404 and G.raw('POST', '/admin/login', 'password=x', form)[0] == 404, 'стандартный адрес /admin при заданном ADMIN_PATH не отвечает (404)')
     st, _, body = G.raw('GET', P)
@@ -186,7 +187,7 @@ def section_2fa(G, bad_totp, bad_path):
     st, _, body = G.raw('GET', P, headers={'Cookie': cookie})
     dash = body.decode()
     check(st == 200 and ('data-act="%s/logout"' % P) in dash, 'после входа панель открывается, «Выйти» ведёт на секретный адрес')
-    check('2FA включена' in dash and 'нестандартный' in dash, 'в диагностике: 2FA включена, адрес нестандартный')
+    check('2FA обязательна' in dash and 'нестандартный' in dash, 'в диагностике: 2FA обязательна, адрес нестандартный')
     csrf = re.search(rb'var csrf="([0-9a-f]+)"', body).group(1).decode()
     check(G.raw('GET', '/api/admin/leads', headers={'Cookie': cookie})[0] == 200, 'cookie действует до выхода')
     check(G.admin_post(P + '/logout', cookie, csrf)[0] == 200, 'выход выполняется')
@@ -201,6 +202,11 @@ def section_2fa(G, bad_totp, bad_path):
     check(st == 503 and 'ADMIN_TOTP_SECRET' in body.decode() and bad_totp.login(code='')[0] == 503, 'неверный ключ 2FA в config.env: админка отключена (503), а не работает без второго фактора')
     st, _, body = bad_path.raw('GET', '/admin')
     check(st == 503 and 'ADMIN_PATH' in body.decode(), 'неверный ADMIN_PATH: админка отключена (503) с понятной причиной')
+    st, _, body = no_totp.raw('GET', '/admin')
+    check(st == 503 and 'не задан ADMIN_TOTP_SECRET' in body.decode() and 'name="code"' not in body.decode(),
+          'ключ 2FA не задан: админка не включается (503) и объясняет, что делать, а не пускает по одному паролю')
+    check(no_totp.login()[0] == 503 and no_totp.login(code='')[0] == 503 and no_totp.raw('GET', '/api/admin/leads')[0] == 403,
+          'без ключа 2FA войти нельзя ни с верным паролем, ни без кода; API админки закрыт (403)')
 
 
 def section_csrf(A):
@@ -425,11 +431,12 @@ def main():
     G = H.PhpSrv(8147, cron=False, ADMIN_TOTP_SECRET=TOTP_KEY, ADMIN_PATH=SECRET_PATH)
     X1 = H.PhpSrv(8148, cron=False, ADMIN_TOTP_SECRET='not a valid key!!')
     X2 = H.PhpSrv(8149, cron=False, ADMIN_PATH='/secret')
+    X3 = H.PhpSrv(8150, cron=False, ADMIN_TOTP_SECRET='')
     try:
         section_admin_closed(A)
         section_login(A, B, C, D)
         section_totp_unit()
-        section_2fa(G, X1, X2)
+        section_2fa(G, X1, X2, X3)
         section_csrf(A)
         section_uploads(A, B)
         section_leads(A, F, B)
@@ -438,7 +445,7 @@ def main():
         section_retention(F)
         section_static()
     finally:
-        for s in (A, B, C, D, E, F, G, X1, X2):
+        for s in (A, B, C, D, E, F, G, X1, X2, X3):
             s.stop()
         httpd.shutdown()
         H.drop_dist()

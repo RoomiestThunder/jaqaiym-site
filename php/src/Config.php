@@ -72,7 +72,8 @@ final class Config
 
     /**
      * Адрес админки, ключ двухфакторного входа и причина отключения админки, если настройки неверны.
-     * Неверное значение никогда не «молча» ослабляет защиту: админка просто не включается.
+     * Двухфакторный вход обязателен: без ADMIN_TOTP_SECRET админка не включается. Неверное значение
+     * никогда не «молча» ослабляет защиту: админка просто не включается.
      * @return array{0:string,1:string,2:?string}
      */
     private static function adminSettings(Env $env, string $adminSecret): array
@@ -87,7 +88,9 @@ final class Config
             $path = '/admin';
         }
         $totp = Totp::normalize($env->str('ADMIN_TOTP_SECRET'));
-        if ($totp !== '' && !Totp::isValidSecret($totp)) {
+        if ($totp === '') {
+            $problem ??= 'не задан ADMIN_TOTP_SECRET: без двухфакторного входа админка не включается (ключ выдаёт python3 tools/make_2fa.py)';
+        } elseif (!Totp::isValidSecret($totp)) {
             $problem ??= 'ADMIN_TOTP_SECRET задан неверно (нужен ключ из 16 и более символов A–Z и 2–7)';
             $totp = '';
         }

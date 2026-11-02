@@ -1,12 +1,13 @@
 """Общая обвязка тестов PHP-версии: боевая сборка во временную папку, встроенный сервер PHP,
 «планировщик» (cron.php раз в полсекунды), вход в админку, подставной Telegram из test_telegram.py."""
-import base64, hashlib, hmac, http.client, json, os, re, shutil, signal, struct, subprocess, sys, tempfile, threading, time, urllib.parse
+import base64, hashlib, hmac, http.client, json, os, re, shutil, signal, sqlite3, struct, subprocess, sys, tempfile, threading, time, urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import test_telegram as T  # noqa: E402
 
 ROOT = T.ROOT
 ADMIN = 'admin-test-password-0123456789'
+TOTP_KEY = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'  # ключ 2FA по умолчанию: без него админка не включается
 WEBHOOK_SECRET = 'wh-secret-test'
 MOCK_URL = 'http://127.0.0.1:8132'
 _dist = []
@@ -43,7 +44,7 @@ class PhpSrv(T.Srv):
         d = dist()
         self.port, self.dir, self.admin = port, tempfile.mkdtemp(prefix='jq-test-'), ADMIN
         self.private = os.path.join(d, 'jaqaiym-private')
-        e = dict(os.environ, JQ_PRIVATE_DIR=self.private, JQ_PUBLIC_DIR=os.path.join(d, 'httpdocs'), DATA_DIR=self.dir, ADMIN_TOKEN=ADMIN,
+        e = dict(os.environ, JQ_PRIVATE_DIR=self.private, JQ_PUBLIC_DIR=os.path.join(d, 'httpdocs'), DATA_DIR=self.dir, ADMIN_TOKEN=ADMIN, ADMIN_TOTP_SECRET=TOTP_KEY,
                  PUBLIC_BASE_URL='http://127.0.0.1:%d' % port, TELEGRAM_API_BASE=MOCK_URL, TG_RETRY_BASE_SECONDS='1', ORPHAN_HOURS='0.0008',
                  MIN_FREE_MB='1', UPLOAD_QUOTA_MB='0.2', TG_WEBHOOK_SECRET=WEBHOOK_SECRET, PHP_CLI_SERVER_WORKERS='4')
         for k in ('TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'TELEGRAM_JOIN_CODE', 'CORS_ORIGINS'):
@@ -51,6 +52,7 @@ class PhpSrv(T.Srv):
         e.update({k: v for k, v in env.items() if v is not None})
         self.env = e
         self.admin_path, self.totp_secret = e.get('ADMIN_PATH', '/admin'), e.get('ADMIN_TOTP_SECRET', '')
+        self.replay_check = False  # True: не сбрасывать «последний принятый код» между входами (проверка защиты от повтора)
         # настройки PHP, как на нормальном хостинге: ошибки в журнал, а не в ответ; лимит тела не меньше 11 МБ
         self.p = subprocess.Popen(['php', '-d', 'display_errors=0', '-d', 'post_max_size=16M', '-d', 'upload_max_filesize=16M',
                                    '-S', '127.0.0.1:%d' % port, '-t', os.path.join(d, 'httpdocs'), os.path.join(ROOT, 'php', 'dev-router.php')],
@@ -99,11 +101,26 @@ class PhpSrv(T.Srv):
         c.close()
         return r.status, r, data
 
+    def _forget_last_code(self):
+        """Код действует один раз, а тестам нужно много входов подряд: сбрасываем отметку о последнем принятом коде прямо в базе."""
+        try:
+            c = sqlite3.connect(os.path.join(self.dir, 'leads.db'), timeout=5)
+            try:
+                c.execute("DELETE FROM kv WHERE k='totp_last_step'")
+                c.commit()
+            finally:
+                c.close()
+        except sqlite3.Error:
+            pass  # базы ещё нет: отметки тоже нет
+
     def login(self, password=None, code=None, step_offset=0, xff=None):
-        """Вход. code=None: при включённой 2FA подставляется верный код (со сдвигом step_offset шагов по 30 с); code='' — без кода.
+        """Вход. code=None: подставляется верный код (со сдвигом step_offset шагов по 30 с); code='' — без кода.
+        Пока replay_check=False, перед каждым входом сбрасывается отметка о последнем коде (иначе второй вход в те же 30 секунд отвергнут).
         xff: адрес «посетителя» (за прокси сервер берёт последнюю запись X-Forwarded-For)."""
         fields = {'password': password if password is not None else ADMIN}
         if code is None and self.totp_secret:
+            if not self.replay_check:
+                self._forget_last_code()
             code = totp_code(self.totp_secret, time.time() + 30 * step_offset)
         if code:
             fields['code'] = code
@@ -115,7 +132,7 @@ class PhpSrv(T.Srv):
         return st, (header.split(';')[0] if header else None), header
 
     def session(self):
-        """Вход под правильным паролем (и кодом, если включена 2FA): (cookie, csrf-токен страницы)."""
+        """Вход под правильным паролем (и кодом): (cookie, csrf-токен страницы)."""
         st, cookie, _ = self.login()
         assert st == 303 and cookie, 'вход не удался: %s' % st
         st, _, body = self.raw('GET', self.admin_path, headers={'Cookie': cookie})
