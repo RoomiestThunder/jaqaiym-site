@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Jq;
 
 /**
- * Вход в админку: пароль (ADMIN_TOKEN) и одноразовый код из приложения (TOTP, ключ ADMIN_TOTP_SECRET). Без ключа админка не включается.
+ * Вход в админку: пароль (ADMIN_TOKEN) на непубличном адресе (ADMIN_PATH). Без них админка не включается.
  * Пароль не попадает ни в адрес, ни в сообщения Telegram: после входа выдаётся подписанная cookie
  * (HttpOnly, Secure на https, SameSite=Lax) на 12 часов. Смена ADMIN_TOKEN сразу делает все выданные cookie недействительными.
  *
@@ -16,7 +16,6 @@ final class Auth
     private const TTL = 43200;
     private const LOGIN_FAILURES = 8;
     private const LOGIN_WINDOW = 900;
-    private const TOTP_STEP_KEY = 'totp_last_step';
     private const EPOCH_KEY = 'session_epoch';
 
     public function __construct(private readonly Config $cfg, private readonly Limiter $limiter, private readonly Db $db)
@@ -43,28 +42,9 @@ final class Auth
         $this->limiter->record('login_fail', $this->limiter->who($ip));
     }
 
-    /** Пароль и код. Код принимается один раз и только после верного пароля. */
-    public function credentialsOk(string $password, string $code): bool
-    {
-        return $this->passwordOk($password) && $this->codeOk($code);
-    }
-
-    private function passwordOk(string $given): bool
+    public function passwordOk(string $given): bool
     {
         return $this->cfg->adminEnabled() && hash_equals(hash('sha256', $this->cfg->adminSecret), hash('sha256', $given));
-    }
-
-    private function codeOk(string $code): bool
-    {
-        return (bool)$this->db->tx(function () use ($code): bool {
-            $last = (int)$this->db->val('SELECT v FROM kv WHERE k=?', [self::TOTP_STEP_KEY]);
-            $step = Totp::verify($this->cfg->adminTotpSecret, $code, time(), $last);
-            if ($step === null) {
-                return false;
-            }
-            $this->db->run('INSERT OR REPLACE INTO kv(k,v) VALUES(?,?)', [self::TOTP_STEP_KEY, (string)$step]);
-            return true;
-        });
     }
 
     /** «Поколение» входов: выход увеличивает его, и все выданные до этого cookie перестают действовать (в том числе украденные). */

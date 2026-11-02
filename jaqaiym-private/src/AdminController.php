@@ -42,10 +42,10 @@ final class AdminController
             Http::html(429, $this->loginPage($nonce, 'Слишком много неудачных попыток входа. Подождите 15 минут.'));
             return;
         }
-        if (!$this->s->auth->credentialsOk(self::postString('password'), self::postString('code'))) {
+        if (!$this->s->auth->passwordOk(self::postString('password'))) {
             $this->s->auth->loginFailed($ip);
             usleep(400000); // замедляет перебор
-            Http::html(401, $this->loginPage($nonce, 'Неверный пароль или код. Каждый код действует один раз: дождитесь нового.'));
+            Http::html(401, $this->loginPage($nonce, 'Неверный пароль.'));
             return;
         }
         $this->s->auth->grant();
@@ -247,7 +247,6 @@ final class AdminController
             'outside' => !str_starts_with($data . '/', rtrim($pub, '/') . '/'),
             'free' => $this->s->files->freeBytes(), 'used' => $this->s->files->usedBytes(), 'quota' => $cfg->quotaBytes,
             'client_ip' => Http::ip(), 'remote_addr' => (string)($_SERVER['REMOTE_ADDR'] ?? ''),
-            'admin_path' => $cfg->adminPath,
         ];
     }
 }

@@ -32,7 +32,6 @@ final class Config
         public readonly float $orphanHours,
         public readonly float $unsentDays,
         public readonly string $adminPath,
-        public readonly string $adminTotpSecret,
         public readonly ?string $adminProblem,
     ) {
     }
@@ -71,10 +70,10 @@ final class Config
     }
 
     /**
-     * Адрес админки, ключ двухфакторного входа и причина отключения админки, если настройки неверны.
-     * Двухфакторный вход обязателен: без ADMIN_TOTP_SECRET админка не включается. Неверное значение
-     * никогда не «молча» ослабляет защиту: админка просто не включается.
-     * @return array{0:string,1:string,2:?string}
+     * Адрес админки и причина отключения админки, если настройки неверны.
+     * Админка включается только с паролем (ADMIN_TOKEN) и непубличным адресом (ADMIN_PATH): угадываемого /admin нет.
+     * Неверное значение никогда не «молча» ослабляет защиту: админка просто не включается (на /admin тогда показано, почему).
+     * @return array{0:string,1:?string}
      */
     private static function adminSettings(Env $env, string $adminSecret): array
     {
@@ -82,19 +81,13 @@ final class Config
         if (strlen($adminSecret) < self::MIN_ADMIN_SECRET) {
             $problem = 'в config.env не задан ADMIN_TOKEN (не короче ' . self::MIN_ADMIN_SECRET . ' символов)';
         }
-        $path = $env->str('ADMIN_PATH', '/admin');
-        if (preg_match('~\A/admin(/[A-Za-z0-9_-]{8,64})?\z~', $path) !== 1) {
+        $path = $env->str('ADMIN_PATH');
+        if ($path === '') {
+            $problem ??= 'не задан ADMIN_PATH: админка открывается только по непубличному адресу вида /admin/ЗНАЧЕНИЕ (его выдаёт python3 tools/make_admin_path.py)';
+        } elseif (preg_match('~\A/admin/[A-Za-z0-9_-]{8,64}\z~', $path) !== 1) {
             $problem ??= 'ADMIN_PATH задан неверно (нужен вид /admin/ЗНАЧЕНИЕ из 8–64 букв, цифр, - и _)';
-            $path = '/admin';
         }
-        $totp = Totp::normalize($env->str('ADMIN_TOTP_SECRET'));
-        if ($totp === '') {
-            $problem ??= 'не задан ADMIN_TOTP_SECRET: без двухфакторного входа админка не включается (ключ выдаёт python3 tools/make_2fa.py)';
-        } elseif (!Totp::isValidSecret($totp)) {
-            $problem ??= 'ADMIN_TOTP_SECRET задан неверно (нужен ключ из 16 и более символов A–Z и 2–7)';
-            $totp = '';
-        }
-        return [$path, $totp, $problem];
+        return [$problem === null ? $path : '/admin', $problem];
     }
 
     public function adminEnabled(): bool
