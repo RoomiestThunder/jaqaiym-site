@@ -5,7 +5,7 @@
 
   1 админка закрыта без входа, подделка и просрочка cookie, старый вход «токеном в адресе» не работает
   2 вход: неверный пароль, перебор (только неудачи и по адресу, IPv6 по /64), флаги cookie, отключённая и слабая админка;
-    одноразовые коды TOTP (эталоны RFC 6238), 2FA, непубличный адрес админки, серверный выход
+    непубличный адрес админки (без него админка не включается), серверный выход
   3 защита от подделки запросов (CSRF + Origin)
   4 загрузки: чужие типы, имена с путями и переводами строк, размер, лимит частоты, права на файлы
   5 приём заявок: кривые типы вместо 500, SQL-инъекции, XSS в админке, подделка строк в Telegram, приманка, повторы
@@ -20,6 +20,7 @@ from html.parser import HTMLParser
 from http.server import ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import make_admin_path  # noqa: E402
 import php_harness as H  # noqa: E402
 
 T = H.T
@@ -79,9 +80,9 @@ def section_admin_closed(A):
             'GET /api/admin/leads?token=<пароль>': A.req('/api/admin/leads?token=' + H.ADMIN)[0]}
     for label, st in seen.items():
         check(st == 403, '%s без входа = 403' % label)
-    for path in ('/api/admin/leads/1/status', '/api/admin/leads/1/resend', '/api/admin/subscribers/1/remove', '/api/admin/webhook/set', '/admin/logout'):
+    for path in ('/api/admin/leads/1/status', '/api/admin/leads/1/resend', '/api/admin/subscribers/1/remove', '/api/admin/webhook/set', A.admin_path + '/logout'):
         check(A.req(path, b'{}', JSON)[0] == 403, 'POST %s без входа = 403' % path)
-    for url in ('/admin', '/admin?token=' + H.ADMIN):
+    for url in (A.admin_path, A.admin_path + '?token=' + H.ADMIN):
         st, _, body = A.raw('GET', url)
         check(st == 200 and 'Пароль' in body.decode() and 'Заявки (' not in body.decode() and '+77001234567' not in body.decode(), 'страница %s показывает только форму входа' % url.split('?')[0])
     now = int(time.time())
@@ -99,8 +100,8 @@ def section_login(A, B, C, D):
     st, cookie, header = A.login()
     low = header.lower()
     check(st == 303 and cookie and 'httponly' in low and 'samesite=lax' in low and 'secure' not in low, 'cookie: HttpOnly, SameSite=Lax (по http без Secure)')
-    check(A.raw('GET', '/admin/login?password=' + H.ADMIN)[0] == 404, 'пароль в адресе (GET) не принимается')
-    st, _, _ = A.raw('POST', '/admin/login', 'password=' + H.ADMIN, {'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://evil.example'})
+    check(A.raw('GET', A.admin_path + '/login?password=' + H.ADMIN)[0] == 404, 'пароль в адресе (GET) не принимается')
+    st, _, _ = A.raw('POST', A.admin_path + '/login', 'password=' + H.ADMIN, {'Content-Type': 'application/x-www-form-urlencoded', 'Origin': 'https://evil.example'})
     check(st == 403, 'вход с чужим Origin отклонён')
     st, cookie, header = D.login()
     low = header.lower()
@@ -109,6 +110,7 @@ def section_login(A, B, C, D):
     check(codes == [401] * 8, 'первые 8 неверных попыток получают 401')
     check(B.login('wrong-9')[0] == 429, '9-я попытка блокируется (429)')
     check(B.login()[0] == 429, 'во время блокировки не пускает даже с верным паролем')
+    C.admin_path = '/admin'  # отключённая админка объясняет причину на /admin
     st, _, body = C.raw('GET', '/admin')
     check(st == 503 and 'отключена' in body.decode(), 'слабый пароль (короче 16): админка отключена, 503')
     check(C.login('short')[0] == 503 and C.req('/api/admin/leads')[0] == 403, 'и войти нельзя даже с этим паролем')
@@ -120,93 +122,43 @@ def section_login(A, B, C, D):
     check(D.login(xff='2001:db8:aaaa:2::1')[0] == 303, 'а адрес из другой сети /64 не затронут')
 
 
-TOTP_KEY = H.TOTP_KEY
-SECRET_PATH = '/admin/test-secret-path-1'
-RFC_KEY = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'  # ASCII «12345678901234567890» в base32: ключ из приложения к RFC 6238
-RFC_VECTORS = {59: '287082', 1111111109: '081804', 1111111111: '050471', 1234567890: '005924', 2000000000: '279037', 20000000000: '353130'}
-
-
-def php_eval(code):
-    boot = os.path.join(H.dist(), 'jaqaiym-private', 'src', 'bootstrap.php')
-    return subprocess.run(['php', '-r', 'require %s; %s' % (json.dumps(boot), code)], capture_output=True, text=True).stdout.strip()
-
-
-def section_totp_unit():
-    print('2b. одноразовые коды (TOTP): эталонные векторы RFC 6238 и правила проверки')
-    table = '[' + ','.join('%d=>"%s"' % (t, c) for t, c in RFC_VECTORS.items()) + ']'
-    out = php_eval('foreach (%s as $t => $c) { echo \\Jq\\Totp::code("%s", intdiv($t, 30)) === $c ? "ok " : "FAIL$t "; }' % (table, RFC_KEY))
-    check(out.split() == ['ok'] * 6, 'PHP-реализация выдаёт эталонные коды RFC 6238 (6 из 6): %s' % out)
-    check(all(H.totp_code(RFC_KEY, t) == c for t, c in RFC_VECTORS.items()), 'независимая реализация в тестах совпадает с теми же эталонами')
-    now = 1700000000
-    cur = now // 30
-    c = lambda s: H.totp_code(TOTP_KEY, s * 30)
-    verify = lambda code, last=0: "var_export(\\Jq\\Totp::verify('%s', '%s', %d, %d), true)" % (TOTP_KEY, code, now, last)
-    cases = [c(cur - 1), c(cur), c(cur + 1), c(cur - 2), c(cur + 2), '%s %s' % (c(cur)[:3], c(cur)[3:]), '12345', 'abcdef', '1234567', '']
-    out = php_eval('echo implode(" ", [%s]);' % ', '.join(verify(x) for x in cases))
-    check(out.split() == [str(cur - 1), str(cur), str(cur + 1), 'NULL', 'NULL', str(cur), 'NULL', 'NULL', 'NULL', 'NULL'],
-          'допуск ±1 шаг на часы, коды за пределами, неверный формат и пустой код не проходят: %s' % out)
-    out = php_eval('echo %s, " ", %s;' % (verify(c(cur), cur), verify(c(cur), cur - 1)))
-    check(out == 'NULL %d' % cur, 'один код нельзя использовать дважды: шаг, не больший последнего принятого, отвергается')
-    out = php_eval('$s = \\Jq\\Totp::normalize("jbsw y3dp-ehpk 3pxp=="); echo $s, " ", var_export(\\Jq\\Totp::isValidSecret($s), true), " ", var_export(\\Jq\\Totp::isValidSecret("SHORT"), true), " ", var_export(\\Jq\\Totp::isValidSecret("JBSWY3DPEHPK3PX1"), true), " ", strlen(\\Jq\\Totp::newSecret());')
-    check(out == 'JBSWY3DPEHPK3PXP true false false 32', 'ключ с пробелами, дефисами и строчными буквами нормализуется; слишком короткий и с недопустимыми символами отвергаются: %s' % out)
-    import make_2fa
-    secret, path = make_2fa.new_secret(), make_2fa.new_admin_path()
-    now = int(time.time())
-    out = php_eval('echo var_export(\\Jq\\Totp::verify(\\Jq\\Totp::normalize("%s"), "%s", %d) !== null, true);' % (make_2fa.grouped(secret).lower(), H.totp_code(secret, now), now))
-    check(out == 'true' and re.fullmatch(r'/admin/[A-Za-z0-9_-]{8,64}', path), 'ключ из tools/make_2fa.py (в записи с пробелами) принимается сервером, адрес подходит под правило ADMIN_PATH')
-
-
-def wait_for_safe_window():
-    """Коды живут по 30 секунд: начинаем в начале шага, чтобы граница шага не пришлась на середину проверок."""
-    t = time.time() % 30
-    if t > 9:
-        time.sleep(30 - t + 1)
-
-
-def section_2fa(G, bad_totp, bad_path, no_totp):
-    print('2c. двухфакторный вход, непубличный адрес админки, выход')
+def section_admin_path(G, bad_path, no_path):
+    print('2b. непубличный адрес админки (ADMIN_PATH), выход, перебор пароля')
+    import make_admin_path
     P = G.admin_path
-    G.replay_check = True
+    check(re.fullmatch(r'/admin/[A-Za-z0-9_-]{24}', P) is not None and P != make_admin_path.new_admin_path(),
+          'адрес из tools/make_admin_path.py случайный и принимается сервером (на нём работает этот раздел)')
     form = {'Content-Type': 'application/x-www-form-urlencoded'}
     check(G.raw('GET', '/admin')[0] == 404 and G.raw('POST', '/admin/login', 'password=x', form)[0] == 404, 'стандартный адрес /admin при заданном ADMIN_PATH не отвечает (404)')
     st, _, body = G.raw('GET', P)
     html = body.decode()
-    check(st == 200 and 'name="code"' in html and ('action="%s/login"' % P) in html, 'на секретном адресе форма входа с полем кода и верным адресом отправки')
-    wait_for_safe_window()
+    check(st == 200 and 'name="password"' in html and 'name="code"' not in html and ('action="%s/login"' % P) in html, 'на секретном адресе форма входа только с паролем и верным адресом отправки')
     me = '198.51.100.20'
-    check(G.login(code='', xff=me)[0] == 401, 'только пароль без кода: 401')
-    check(G.login(code='000000', xff=me)[0] == 401, 'верный пароль и неверный код: 401')
-    check(G.login(password='wrong-password', xff=me)[0] == 401, 'неверный пароль при верном коде: 401')
-    st, cookie, header = G.login(xff=me, step_offset=-1)
-    check(st == 303 and cookie and 'httponly' in header.lower(), 'верный пароль и верный код (допускается код прошлого шага): вход, и код не «сгорел» от неудачной попытки с чужим паролем')
-    check(G.login(xff=me, step_offset=-1)[0] == 401, 'тот же код второй раз: 401 (повтор отвергается)')
-    st, cookie, _ = G.login(xff=me)
-    check(st == 303 and cookie, 'код текущего шага (он позже прежнего) принимается')
-    check(G.login(xff=me, step_offset=-1)[0] == 401 and G.login(xff=me, step_offset=-3)[0] == 401 and G.login(xff=me, step_offset=3)[0] == 401,
-          'код уже использованного или слишком старого/будущего шага отвергается')
+    check(G.login(password='wrong-password', xff=me)[0] == 401, 'неверный пароль: 401')
+    st, cookie, header = G.login(xff=me)
+    check(st == 303 and cookie and 'httponly' in header.lower(), 'верный пароль на секретном адресе: вход')
     st, _, body = G.raw('GET', P, headers={'Cookie': cookie})
     dash = body.decode()
     check(st == 200 and ('data-act="%s/logout"' % P) in dash, 'после входа панель открывается, «Выйти» ведёт на секретный адрес')
-    check('2FA обязательна' in dash and 'нестандартный' in dash, 'в диагностике: 2FA обязательна, адрес нестандартный')
+    check('непубличный адрес админки' in dash, 'в диагностике: вход по паролю на непубличном адресе')
     csrf = re.search(rb'var csrf="([0-9a-f]+)"', body).group(1).decode()
     check(G.raw('GET', '/api/admin/leads', headers={'Cookie': cookie})[0] == 200, 'cookie действует до выхода')
     check(G.admin_post(P + '/logout', cookie, csrf)[0] == 200, 'выход выполняется')
-    check(G.raw('GET', '/api/admin/leads', headers={'Cookie': cookie})[0] == 403 and G.raw('GET', P, headers={'Cookie': cookie})[2].decode().count('name="code"') == 1,
+    check(G.raw('GET', '/api/admin/leads', headers={'Cookie': cookie})[0] == 403 and G.raw('GET', P, headers={'Cookie': cookie})[2].decode().count('name="password"') == 1,
           'после выхода прежняя cookie больше не действует (выход серверный, а не только на стороне браузера)')
     lid = G.lead()
     log = os.path.join(G.dir, 'outbox.log')
     check(H.T.wait(lambda: os.path.exists(log) and ('Карточка: http://127.0.0.1:8147%s#lead-%d' % (P, lid)) in open(log, encoding='utf-8').read()), 'ссылка на карточку в сообщении ведёт на секретный адрес')
     them = '198.51.100.30'
-    check([G.login(code='111111', xff=them)[0] for _ in range(8)] == [401] * 8 and G.login(xff=them, step_offset=1)[0] == 429, 'неверные коды считаются как неудачные попытки: после 8 вход с этого адреса закрыт (429) даже с верным кодом')
-    st, _, body = bad_totp.raw('GET', '/admin')
-    check(st == 503 and 'ADMIN_TOTP_SECRET' in body.decode() and bad_totp.login(code='')[0] == 503, 'неверный ключ 2FA в config.env: админка отключена (503), а не работает без второго фактора')
+    check([G.login(password='wrong-%d' % i, xff=them)[0] for i in range(8)] == [401] * 8 and G.login(xff=them)[0] == 429,
+          'после 8 неверных паролей вход с этого адреса закрыт (429) даже с верным паролем')
+    bad_path.admin_path = '/admin'
     st, _, body = bad_path.raw('GET', '/admin')
-    check(st == 503 and 'ADMIN_PATH' in body.decode(), 'неверный ADMIN_PATH: админка отключена (503) с понятной причиной')
-    st, _, body = no_totp.raw('GET', '/admin')
-    check(st == 503 and 'не задан ADMIN_TOTP_SECRET' in body.decode() and 'name="code"' not in body.decode(),
-          'ключ 2FA не задан: админка не включается (503) и объясняет, что делать, а не пускает по одному паролю')
-    check(no_totp.login()[0] == 503 and no_totp.login(code='')[0] == 503 and no_totp.raw('GET', '/api/admin/leads')[0] == 403,
-          'без ключа 2FA войти нельзя ни с верным паролем, ни без кода; API админки закрыт (403)')
+    check(st == 503 and 'ADMIN_PATH' in body.decode() and bad_path.login()[0] == 503, 'неверный ADMIN_PATH: админка отключена (503) с понятной причиной')
+    st, _, body = no_path.raw('GET', '/admin')
+    check(st == 503 and 'не задан ADMIN_PATH' in body.decode() and 'name="password"' not in body.decode(),
+          'ADMIN_PATH не задан: админка не включается (503) и объясняет, что делать, а не открывается на угадываемом /admin')
+    check(no_path.login()[0] == 503 and no_path.raw('GET', '/api/admin/leads')[0] == 403, 'без ADMIN_PATH войти нельзя даже с верным паролем; API админки закрыт (403)')
 
 
 def section_csrf(A):
@@ -294,7 +246,7 @@ def section_leads(A, F, B):
     xss = payload(); xss['customer']['name'] = '<script>alert(1)</script>'; xss['project']['description'] = '<img src=x onerror=alert(1)> {{7*7}}'
     post_lead(F, xss)
     cookie, _ = F.session()
-    st, r, body = F.admin_get('/admin', cookie)
+    st, r, body = F.admin_get(F.admin_path, cookie)
     html = body.decode()
     check('<script>alert(1)' not in html and '&lt;script&gt;alert(1)' in html and '<img src=x' not in html, 'XSS в имени и примечании в админке экранирован')
     csp = r.getheader('Content-Security-Policy') or ''
@@ -315,7 +267,7 @@ def section_leads(A, F, B):
     check(wait(lambda: A.lead_row(lid)['notified'] == 1), 'заявка с переводами строк доставлена')
     text = sent('sendMessage', 111, lid)[0]['text']
     cards = [l for l in text.splitlines() if l.startswith('Карточка:')]
-    check(len(cards) == 1 and cards[0].startswith('Карточка: http://127.0.0.1:8141/admin#lead-'), 'клиент не может подделать служебную строку «Карточка:» в сообщении команде')
+    check(len(cards) == 1 and cards[0].startswith('Карточка: http://127.0.0.1:8141%s#lead-' % A.admin_path), 'клиент не может подделать служебную строку «Карточка:» в сообщении команде')
     check(text.count('\nФайлы:') == 1, 'и строку «Файлы:»')
 
 
@@ -428,15 +380,13 @@ def main():
     C = H.PhpSrv(8143, cron=False, ADMIN_TOKEN='short')
     D = H.PhpSrv(8144, cron=False, PUBLIC_BASE_URL='https://jaqaiym.test')
     E = H.PhpSrv(8145, TELEGRAM_BOT_TOKEN=BOT, TELEGRAM_CHAT_ID='111', TELEGRAM_API_BASE='http://127.0.0.1:9')
-    G = H.PhpSrv(8147, cron=False, ADMIN_TOTP_SECRET=TOTP_KEY, ADMIN_PATH=SECRET_PATH)
-    X1 = H.PhpSrv(8148, cron=False, ADMIN_TOTP_SECRET='not a valid key!!')
+    G = H.PhpSrv(8147, cron=False, ADMIN_PATH=make_admin_path.new_admin_path())
     X2 = H.PhpSrv(8149, cron=False, ADMIN_PATH='/secret')
-    X3 = H.PhpSrv(8150, cron=False, ADMIN_TOTP_SECRET='')
+    X3 = H.PhpSrv(8150, cron=False, ADMIN_PATH='')
     try:
         section_admin_closed(A)
         section_login(A, B, C, D)
-        section_totp_unit()
-        section_2fa(G, X1, X2, X3)
+        section_admin_path(G, X2, X3)
         section_csrf(A)
         section_uploads(A, B)
         section_leads(A, F, B)
@@ -445,7 +395,7 @@ def main():
         section_retention(F)
         section_static()
     finally:
-        for s in (A, B, C, D, E, F, G, X1, X2, X3):
+        for s in (A, B, C, D, E, F, G, X2, X3):
             s.stop()
         httpd.shutdown()
         H.drop_dist()

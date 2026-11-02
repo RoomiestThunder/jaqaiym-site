@@ -63,7 +63,7 @@ def main():
         check(wait(lambda: S.lead_row(lid)['notified'] == 1), 'заявка помечена доставленной')
         text = sent('sendMessage', 111, lid)
         check(len(text) == 1 and 'Файлы: 4' in text[0]['text'], 'одно текстовое сообщение, в нём указано число файлов')
-        check('/admin#lead-%d' % lid in text[0]['text'] and H.ADMIN not in text[0]['text'] and 'token=' not in text[0]['text'], 'ссылка на карточку без пароля и токена')
+        check('%s#lead-%d' % (H.ADMIN_PATH, lid) in text[0]['text'] and H.ADMIN not in text[0]['text'] and 'token=' not in text[0]['text'], 'ссылка на карточку без пароля и токена')
         g = sent('sendMediaGroup', 111, lid)
         check(len(g) == 1 and len(g[0]['files']) == 3, 'фото ушли одним альбомом (3 шт.)')
         d = sent('sendDocument', 111, lid)
@@ -73,7 +73,7 @@ def main():
         cookie, csrf = S.session()
         check(S.req('/api/files/%s' % ids[0], headers={'Cookie': cookie})[0] == 410, 'удалённый файл отдаётся как 410')
         check(all(r['deleted_at'] for r in S.sql('SELECT deleted_at FROM attachments')), 'в базе файлы помечены удалёнными')
-        page = S.admin_get('/admin', cookie)[2].decode()
+        page = S.admin_get(H.ADMIN_PATH, cookie)[2].decode()
         check('отправлен в Telegram и удалён с сервера' in page and 'доставлено в Telegram' in page, 'админка показывает доставку и удалённые файлы')
 
         print('A2. CORS: страница с github.io может слать заявки')
@@ -138,7 +138,7 @@ def main():
         check(len(sent('sendMessage', 111, lid)) == before, 'дошедшее второй раз не дублируется')
         st, d = S.admin_post('/api/admin/webhook/set', cookie, csrf)
         check(st == 200 and Mock.webhook.get('url') == 'http://127.0.0.1:8133/api/tg/webhook' and Mock.webhook.get('secret_token') == H.WEBHOOK_SECRET, 'кнопка «подключить вебхук» передаёт Telegram адрес и секрет')
-        check('Вебхук подключён' in S.admin_get('/admin', cookie)[2].decode(), 'админка показывает, что вебхук подключён')
+        check('Вебхук подключён' in S.admin_get(H.ADMIN_PATH, cookie)[2].decode(), 'админка показывает, что вебхук подключён')
     finally:
         S.stop()
 

@@ -34,10 +34,9 @@ final class AdminPage
         if ($disabled !== null) {
             $body .= '<p class="err">Админка отключена: ' . self::e($disabled) . '.</p></div>';
         } else {
-            $code = '<label>Код из приложения-аутентификатора<input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required></label>';
             $body .= ($error !== null ? '<p class="err">' . self::e($error) . '</p>' : '')
                 . '<form method="post" action="' . self::e($action) . '"><label>Пароль<input type="password" name="password" autocomplete="current-password" autofocus required></label>'
-                . $code . '<button type="submit">Войти</button></form></div>';
+                . '<button type="submit">Войти</button></form></div>';
         }
         return self::shell('Вход: JAQAIYM', $nonce, $body);
     }
@@ -161,8 +160,7 @@ final class AdminPage
             . ($d['post_ok'] ? '' : '<br><b class="bad">post_max_size меньше ' . ($d['max_file_mb'] + 1) . ' МБ: фото крупнее лимита не загрузятся. Увеличьте в настройках PHP (Plesk → PHP).</b>')
             . '<br>Данные вне корня сайта: <b class="' . ($d['outside'] ? 'ok">да' : 'bad">НЕТ') . '</b>'
             . '<br>Свободно на диске: ' . sprintf('%.0f', $d['free'] / 1048576) . ' МБ'
-            . '<br>Вход: <b class="ok">пароль и одноразовый код (2FA обязательна)</b>'
-            . ' · адрес админки: ' . ($d['admin_path'] === '/admin' ? '<b class="bad">стандартный /admin (смените ADMIN_PATH)</b>' : '<b class="ok">нестандартный</b>')
+            . '<br>Вход: <b class="ok">пароль и непубличный адрес админки</b>'
             . '<br>Ваш адрес по данным сервера: <b>' . self::e($d['client_ip']) . '</b> (REMOTE_ADDR ' . self::e($d['remote_addr']) . '). Если здесь адрес самого сервера, лимиты запросов считаются на всех посетителей вместе.</p></section>';
     }
 }
