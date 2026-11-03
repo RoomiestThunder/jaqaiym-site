@@ -161,6 +161,28 @@ def section_admin_path(G, bad_path, no_path):
     check(no_path.login()[0] == 503 and no_path.raw('GET', '/api/admin/leads')[0] == 403, 'без ADMIN_PATH войти нельзя даже с верным паролем; API админки закрыт (403)')
 
 
+def section_delete(F):
+    print('3b. удаление заявки в админке')
+    cookie, csrf = F.session()
+    fid = F.upload('del.png', PNG())[1]['id']
+    before = set(F.disk())
+    lid, keep = F.lead([fid]), F.lead()
+    path = '/api/admin/leads/%d/delete' % lid
+    check(F.req(path, b'{}', JSON)[0] == 403, 'удаление без входа: 403')
+    check(F.admin_post(path, cookie, None)[0] == 403 and F.admin_post(path, cookie, 'f' * 64)[0] == 403, 'без верного CSRF-токена: 403')
+    check(F.admin_post(path, cookie, csrf, Origin='https://evil.example')[0] == 403, 'с чужим Origin: 403')
+    check(F.sql('SELECT COUNT(*) AS n FROM leads WHERE id=?', lid)[0]['n'] == 1 and len(F.disk()) == len(before), 'отказы ничего не удалили: заявка и файл на месте')
+    check(F.admin_post(path, cookie, csrf)[0] == 200, 'с входом и CSRF-токеном заявка удаляется: 200')
+    check(F.sql('SELECT COUNT(*) AS n FROM leads WHERE id=?', lid)[0]['n'] == 0 and F.sql('SELECT COUNT(*) AS n FROM attachments WHERE lead_id=? OR id=?', lid, fid)[0]['n'] == 0
+          and F.sql('SELECT COUNT(*) AS n FROM tg_sent WHERE lead_id=?', lid)[0]['n'] == 0, 'из базы исчезли заявка, записи о файлах и о доставке')
+    check(set(F.disk()) <= before and len(F.disk()) == len(before) - 1, 'файл заявки удалён с диска')
+    check(F.sql('SELECT COUNT(*) AS n FROM leads WHERE id=?', keep)[0]['n'] == 1, 'другая заявка не затронута')
+    check(F.admin_post(path, cookie, csrf)[0] == 404, 'повторное удаление и несуществующая заявка: 404')
+    st, r, body = F.admin_get('/api/admin/leads', cookie)
+    check(lid not in [row['id'] for row in json.loads(body)['leads']], 'в списке админки удалённой заявки нет')
+    check(('data-act="/api/admin/leads/%d/delete"' % keep) in F.admin_get(F.admin_path, cookie)[2].decode(), 'в карточке есть кнопка «удалить» с подтверждением')
+
+
 def section_csrf(A):
     print('3. подделка запросов (CSRF)')
     lid = A.lead()
@@ -390,6 +412,7 @@ def main():
         section_csrf(A)
         section_uploads(A, B)
         section_leads(A, F, B)
+        section_delete(F)
         section_webhook(A)
         section_leaks(A, E)
         section_retention(F)

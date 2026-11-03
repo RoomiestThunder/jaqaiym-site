@@ -6,7 +6,7 @@ namespace Jq;
 /** Хранение заявок. Заявка сохраняется в базе до любой отправки: сбой Telegram её не теряет. */
 final class Leads
 {
-    public function __construct(private readonly Db $db, private readonly Summary $summary)
+    public function __construct(private readonly Db $db, private readonly Summary $summary, private readonly Files $files)
     {
     }
 
@@ -47,6 +47,24 @@ final class Leads
     public function setStatus(int $id, string $status): void
     {
         $this->db->run('UPDATE leads SET status=?, updated_at=? WHERE id=?', [$status, Clock::now(), $id]);
+    }
+
+    /**
+     * Безвозвратно удаляет заявку вместе с файлами на диске и записями о них (отзыв согласия, тестовые заявки, срок хранения).
+     * Сообщение в чате Telegram приложение удалить не может: его убирают вручную. @return bool false: такой заявки нет
+     */
+    public function erase(int $id): bool
+    {
+        if ($this->db->one('SELECT id FROM leads WHERE id=?', [$id]) === null) {
+            return false;
+        }
+        foreach ($this->db->all('SELECT id FROM attachments WHERE lead_id=? AND path IS NOT NULL', [$id]) as $file) {
+            $this->files->remove((string)$file['id']);
+        }
+        $this->db->run('DELETE FROM attachments WHERE lead_id=?', [$id]);
+        $this->db->run('DELETE FROM tg_sent WHERE lead_id=?', [$id]);
+        $this->db->run('DELETE FROM leads WHERE id=?', [$id]);
+        return true;
     }
 
     /** @return list<array<string,mixed>> заявки с файлами, новые сверху (для админки) */

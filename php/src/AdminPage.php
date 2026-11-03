@@ -11,7 +11,7 @@ final class AdminPage
         . 'article:target{outline:2px solid #b65c37}header{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.t{color:#8a7a6c}'
         . '.tag{background:#eadfce;border-radius:99px;padding:2px 10px;font-size:12px}select{margin-left:auto;padding:6px}.s{font-size:16px;white-space:pre-line}'
         . '.f a,.f .gone{display:inline-block;margin:0 10px 6px 0;background:#f5efe3;padding:4px 10px;border-radius:8px;color:#2e1a10}.f .gone{color:#8a7a6c}'
-        . '.m{color:#8a7a6c;font-size:13px}code{background:#f5efe3;padding:1px 5px;border-radius:5px}button{cursor:pointer;margin-left:6px}ul{margin:6px 0;padding-left:20px}'
+        . '.m{color:#8a7a6c;font-size:13px}code{background:#f5efe3;padding:1px 5px;border-radius:5px}button{cursor:pointer;margin-left:6px}.danger{color:#a33}ul{margin:6px 0;padding-left:20px}'
         . '.top{display:flex;justify-content:space-between;align-items:center}.err{color:#a3261b}.ok{color:#2b7a3d}.bad{color:#a3261b}input[type=password],input[name=code]{padding:8px;width:100%;box-sizing:border-box;margin:8px 0}';
 
     private static function e(mixed $s): string
@@ -54,6 +54,7 @@ final class AdminPage
         $script = "(function(){var csrf=" . json_encode($c['csrf']) . ";"
             . "function post(u,b){return fetch(u,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify(b||{})});}"
             . "document.addEventListener('click',function(e){var b=e.target.closest('[data-act]');if(!b)return;"
+            . "var q=b.getAttribute('data-confirm');if(q&&!confirm(q))return;"
             . "post(b.getAttribute('data-act')).then(function(r){if(!r.ok){alert('Не получилось: '+r.status);return}location.reload()})});"
             . "document.addEventListener('change',function(e){var s=e.target.closest('select[data-status]');if(!s)return;"
             . "post('/api/admin/leads/'+s.getAttribute('data-status')+'/status',{status:s.value}).then(function(r){if(!r.ok)alert('Не получилось: '+r.status)})});})();";
@@ -83,7 +84,9 @@ final class AdminPage
             . '<p><b>' . self::e($c['name'] ?? '—') . '</b> · <a href="tel:' . self::e($c['phone'] ?? '') . '">' . self::e($c['phone'] ?? '') . '</a> · '
             . self::e($l['channel_label']) . ($time !== '' ? ' · удобно: ' . self::e($time) : '') . '</p>'
             . '<p class="f">' . ($files ?: '<i>файлов нет</i>') . '</p>'
-            . '<p class="m">Источник: ' . self::e($src['page'] ?? '—') . ' ' . self::e(is_string($src['project_id'] ?? null) ? $src['project_id'] : '') . ' · ' . self::delivery($l) . '</p></article>';
+            . '<p class="m">Источник: ' . self::e($src['page'] ?? '—') . ' ' . self::e(is_string($src['project_id'] ?? null) ? $src['project_id'] : '') . ' · ' . self::delivery($l)
+            . ' <button class="danger" data-act="/api/admin/leads/' . (int)$l['id'] . '/delete" data-confirm="Удалить заявку №' . (int)$l['id']
+            . ' безвозвратно вместе с файлами? Сообщение в Telegram останется: удалите его в чате вручную.">удалить</button></p></article>';
     }
 
     /** @param array<string,mixed> $l */

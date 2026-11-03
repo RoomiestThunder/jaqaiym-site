@@ -17,7 +17,7 @@ final class Maintenance
         private readonly Config $cfg,
         private readonly Db $db,
         private readonly Notifier $notifier,
-        private readonly Files $files,
+        private readonly Leads $leads,
         private readonly Limiter $limiter,
     ) {
     }
@@ -64,12 +64,7 @@ final class Maintenance
             "SELECT id FROM leads WHERE status<>'won' AND COALESCE(updated_at, created_at) < ?", [$before],
         ), 'id');
         foreach ($ids as $id) {
-            foreach ($this->db->all('SELECT id FROM attachments WHERE lead_id=? AND path IS NOT NULL', [$id]) as $a) {
-                $this->files->remove((string)$a['id']);
-            }
-            $this->db->run('DELETE FROM attachments WHERE lead_id=?', [$id]);
-            $this->db->run('DELETE FROM tg_sent WHERE lead_id=?', [$id]);
-            $this->db->run('DELETE FROM leads WHERE id=?', [$id]);
+            $this->leads->erase((int)$id);
         }
         return count($ids);
     }
