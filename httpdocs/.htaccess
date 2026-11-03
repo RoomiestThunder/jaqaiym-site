@@ -36,6 +36,12 @@ Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), 
 Header always set Cross-Origin-Opener-Policy "same-origin"
 # принуждает браузер ходить только по https (по http заголовок игнорируется); включайте, когда https уже работает
 Header always set Strict-Transport-Security "max-age=31536000"
+# настоящий CSP-заголовок (в дополнение к <meta> на страницах, который точечно разрешает свои встроенные скрипты по хешу).
+# Здесь только то, что не зависит от конкретной страницы: frame-ancestors (meta его не умеет — усиливает X-Frame-Options)
+# и остальные директивы без script-src/default-src, чтобы не спорить с хешами скриптов из <meta>.
+Header always set Content-Security-Policy "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'"
+# бренд хостинга в заголовке ответа — лишняя информация об используемом стеке
+Header always unset X-Powered-By
 # страницы и скрипты проверяются при каждом заходе (дёшево, 304), чтобы после обновления сайта не оставалась старая версия
 <FilesMatch "\.(html|css|js|json)$">
     Header set Cache-Control "no-cache"
