@@ -380,9 +380,11 @@ def section_static():
     request_page = open(os.path.join(dist, 'httpdocs', 'request', 'index.html'), encoding='utf-8').read()
     check("img-src 'self' data: blob:" in request_page, 'CSP разрешает blob: для картинок (анкета показывает миниатюры загруженных фото через URL.createObjectURL)')
     ht = open(os.path.join(dist, 'httpdocs', '.htaccess')).read()
-    for needle in ('Options -Indexes', 'RewriteRule ^(api|admin)', 'X-Frame-Options', 'Strict-Transport-Security', 'X-Content-Type-Options', 'Require all denied'):
+    for needle in ('Options -Indexes', 'RewriteRule ^(api|admin)', 'X-Frame-Options', 'Strict-Transport-Security', 'X-Content-Type-Options', 'Require all denied', 'Content-Security-Policy', "frame-ancestors 'none'", 'unset X-Powered-By'):
         check(needle in ht, '.htaccess содержит «%s»' % needle)
     check(ht.count('Require all denied') >= 2, '.htaccess закрывает посторонние .php и скрытые файлы')
+    csp_header = re.search(r'Content-Security-Policy "([^"]+)"', ht).group(1)
+    check("default-src" not in csp_header and "script-src" not in csp_header, 'CSP-заголовок .htaccess не трогает default-src/script-src — это решает <meta> по хешу конкретной страницы')
     find = [os.path.join(dp, f) for dp, _, fs in os.walk(dist) for f in fs if f in ('.env', 'config.env') or f.endswith(('.db', '.sqlite', '.log'))]
     check(not find, 'в сборке нет секретов, баз и журналов: %s' % find)
     check(php_ip('8.8.8.8', '1.2.3.4') == '8.8.8.8', 'IP: с публичного адреса поддельный X-Forwarded-For игнорируется')
