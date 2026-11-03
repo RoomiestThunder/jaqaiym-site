@@ -5,7 +5,7 @@ namespace Jq;
 
 use PDO;
 
-/** SQLite через PDO: только подготовленные запросы. Схема совпадает с версией на Python. */
+/** SQLite через PDO: только подготовленные запросы. */
 final class Db
 {
     private const TABLES = <<<'SQL'

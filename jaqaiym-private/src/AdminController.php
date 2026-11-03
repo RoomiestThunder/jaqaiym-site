@@ -115,6 +115,14 @@ final class AdminController
         $this->s->notifier->deliver($id);
     }
 
+    public function deleteLead(int $id): void
+    {
+        if (!$this->guard()) {
+            return;
+        }
+        $this->s->leads->erase($id) ? Http::json(200, ['ok' => true]) : Http::json(404, ['error' => 'not_found']);
+    }
+
     public function removeSubscriber(string $chatId): void
     {
         if ($this->guard()) {

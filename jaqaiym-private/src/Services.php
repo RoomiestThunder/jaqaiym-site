@@ -26,13 +26,13 @@ final class Services
         $this->schema = Schema::load($cfg->publicDir . '/schema.json');
         $this->validator = new Validator($this->schema);
         $this->summary = new Summary($this->schema, $cfg);
-        $this->leads = new Leads($this->db, $this->summary);
         $this->files = new Files($cfg, $this->db);
+        $this->leads = new Leads($this->db, $this->summary, $this->files);
         $this->limiter = new Limiter($this->db, $cfg);
         $this->tg = new Telegram($cfg);
         $this->subs = new Subscribers($cfg, $this->db, $this->tg, $this->limiter);
         $this->notifier = new Notifier($cfg, $this->db, $this->tg, $this->files, $this->summary, $this->subs);
-        $this->maintenance = new Maintenance($cfg, $this->db, $this->notifier, $this->files, $this->limiter);
+        $this->maintenance = new Maintenance($cfg, $this->db, $this->notifier, $this->leads, $this->limiter);
         $this->auth = new Auth($cfg, $this->limiter, $this->db);
     }
 }

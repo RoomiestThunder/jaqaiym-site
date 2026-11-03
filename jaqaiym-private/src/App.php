@@ -46,6 +46,7 @@ final class App
             ['GET', '#^/api/admin/leads$#', fn() => $admin->leadsJson()],
             ['POST', '#^/api/admin/leads/(\d+)/status$#', fn(array $m) => $admin->setStatus((int)$m[1])],
             ['POST', '#^/api/admin/leads/(\d+)/resend$#', fn(array $m) => $admin->resend((int)$m[1])],
+            ['POST', '#^/api/admin/leads/(\d+)/delete$#', fn(array $m) => $admin->deleteLead((int)$m[1])],
             ['POST', '#^/api/admin/subscribers/(-?\d+)/remove$#', fn(array $m) => $admin->removeSubscriber($m[1])],
             ['POST', '#^/api/admin/webhook/set$#', fn() => $admin->setWebhook()],
             ['GET', '#^/api/files/([0-9a-f]{32})$#', fn(array $m) => $admin->file($m[1])],
