@@ -1,8 +1,8 @@
 """Контрактный тест правил обязательных полей.
 
-Обе версии сервера (PHP и Python) обязаны вести себя так, как описано в public/schema.json (раздел required):
+Сервер обязан вести себя так, как описано в public/schema.json (раздел required):
 по заявке со всеми обязательными ответами выдаётся 201, а без любого из них — 422 с ошибкой именно по этому полю.
-Вызывается из tools/test_php.py и tools/test_telegram.py: run(сервер, check).
+Вызывается из tools/test_php.py: run(сервер, check).
 """
 import copy, json, os, uuid
 

@@ -1,9 +1,9 @@
 """Общая обвязка тестов PHP-версии: боевая сборка во временную папку, встроенный сервер PHP,
-«планировщик» (cron.php раз в полсекунды), вход в админку, подставной Telegram из test_telegram.py."""
+«планировщик» (cron.php раз в полсекунды), вход в админку, подставной Telegram из testkit.py."""
 import http.client, json, os, re, shutil, signal, subprocess, sys, tempfile, threading, time, urllib.error, urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import test_telegram as T  # noqa: E402
+import testkit as T  # noqa: E402
 
 ROOT = T.ROOT
 ADMIN = 'admin-test-password-0123456789'
@@ -29,7 +29,7 @@ def drop_dist():
 
 
 class PhpSrv(T.Srv):
-    """Сервер заявок на PHP. Методы req/upload/lead/sql/lead_row/disk унаследованы от версии для Python."""
+    """Сервер заявок на PHP. Методы req/upload/lead/sql/lead_row/disk унаследованы от testkit.Srv."""
 
     def __init__(self, port, cron=True, **env):
         d = dist()

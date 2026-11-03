@@ -1,5 +1,5 @@
 """Сборка HTML-страниц из шаблонов public/*.html: подстановка {{ключей}} из i18n и site.json.
-Используется и сервером (server.py), и статической сборкой (tools/build_static.py)."""
+Используется статической сборкой (tools/build_static.py)."""
 import json, os, re, sys
 
 import seo

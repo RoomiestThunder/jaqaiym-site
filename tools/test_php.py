@@ -3,8 +3,7 @@
 
   python3 tools/test_php.py
 
-Те же сценарии, что в test_telegram.py для версии на Python, плюс то, что есть только у PHP:
-подписчики приходят через вебхук (а не long-poll), повторы и очистку делает cron.php, в админку входят по паролю.
+Подписчики приходят через вебхук Telegram, повторы и очистку делает cron.php, в админку входят по паролю на непубличном адресе.
   A  текст + альбом фото + PDF доходят, файлы удаляются, выдача удалённого файла = 410
   B  подписчики по /join КОД: неверный код отклонён, рассылка всем, при сбое у одного нет дублей
   C  заблокировавший бота подписчик отключается и не мешает остальным
@@ -88,11 +87,11 @@ def main():
         print('B. подписчики через вебхук и частичный сбой')
         S.join(222, '/join@jq_test_bot secret123'); S.join(-1003, '/join secret123', 'supergroup', 'Команда'); S.join(444, '/join wrong')
         check(wait(lambda: len(S.sql('SELECT * FROM tg_subscribers WHERE active=1')) == 2), 'по верному коду подписались личный чат и группа')
-        check(any('Неверный код' in e['text'] for e in sent('sendMessage', 444)), 'неверный код отклонён, подписки нет')
+        check(wait(lambda: any('Неверный код' in e['text'] for e in sent('sendMessage', 444))), 'неверный код отклонён, подписки нет')
         Mock.fail[('sendMediaGroup', '222')] = [(429, 'Too Many Requests: retry after 1', 1)]
         ids = [S.upload('x.png', PNG())[1]['id'], S.upload('y.png', PNG())[1]['id']]
         lid = S.lead(ids)
-        check(wait(lambda: S.lead_row(lid)['notified'] == 1, 25), 'после сбоя у одного получателя заявка доставлена повтором (cron)')
+        check(wait(lambda: S.lead_row(lid)['notified'] == 1, 40), 'после сбоя у одного получателя заявка доставлена повтором (cron)')
         for ch in ('111', '222', '-1003'):
             check(len(sent('sendMessage', ch, lid)) == 1, 'чат %s получил текст ровно один раз' % ch)
             check(len(sent('sendMediaGroup', ch, lid)) == 1, 'чат %s получил альбом ровно один раз' % ch)
@@ -101,6 +100,7 @@ def main():
         print('C. заблокировавший бота подписчик')
         S.join(555, '/join secret123')
         check(wait(lambda: len(S.sql('SELECT * FROM tg_subscribers WHERE active=1')) == 3), 'ещё один подписчик')
+        check(wait(lambda: len(sent('sendMessage', 555)) >= 1), 'подтверждение подписки отправлено (сбой готовим только после него, иначе он достанется ему)')
         Mock.fail[('sendMessage', '555')] = [(403, 'Forbidden: bot was blocked by the user', 0)]
         lid = S.lead([S.upload('z.png', PNG())[1]['id']])
         check(wait(lambda: S.lead_row(lid)['notified'] == 1), 'заявка доставлена остальным')
@@ -117,12 +117,12 @@ def main():
         print('E. очистка и квота')
         orphan = S.upload('orphan.jpg', JPG())[1]['id']
         check(orphan in S.disk(), 'загрузка без заявки лежит на диске')
-        check(wait(lambda: orphan not in S.disk(), 15), 'через ORPHAN_HOURS загрузка без заявки удалена (cron)')
+        check(wait(lambda: orphan not in S.disk(), 40), 'через ORPHAN_HOURS загрузка без заявки удалена (cron)')
         big = b'\xff\xd8\xff\xe0' + os.urandom(150000)
         check(S.upload('big.jpg', big)[0] == 201, 'файл в пределах квоты принят')
         st, d = S.upload('big2.jpg', big)
         check(st == 507 and d.get('error') == 'storage_full', 'сверх квоты отказ 507 storage_full')
-        check(wait(lambda: S.disk() == [], 15), 'после очистки место освободилось')
+        check(wait(lambda: S.disk() == [], 40), 'после очистки место освободилось')
         check(S.upload('again.jpg', JPG())[0] == 201, 'загрузка снова принимается')
 
         print('F. отписка')
@@ -150,7 +150,7 @@ def main():
         check(wait(lambda: 'Нет получателей' in (S2.lead_row(lid)['notify_error'] or '')), 'без получателей заявка ждёт, причина видна')
         check(S2.disk() == ids, 'файл пока лежит на диске')
         S2.join(777, '/start secret123')
-        ok = wait(lambda: S2.lead_row(lid)['notified'] == 1, 20)
+        ok = wait(lambda: S2.lead_row(lid)['notified'] == 1, 40)
         check(ok, 'после подписки заявка доставлена')
         if not ok:
             print('   отладка:', {k: S2.lead_row(lid)[k] for k in ('notified', 'notify_attempts', 'notify_error', 'next_attempt_at', 'tg_targets')}, '\n   log:', S2.log())

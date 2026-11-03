@@ -35,7 +35,7 @@ Header always set Referrer-Policy "strict-origin-when-cross-origin"
 Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
 Header always set Cross-Origin-Opener-Policy "same-origin"
 # принуждает браузер ходить только по https (по http заголовок игнорируется); включайте, когда https уже работает
-Header always set Strict-Transport-Security "max-age=15552000"
+Header always set Strict-Transport-Security "max-age=31536000"
 # страницы и скрипты проверяются при каждом заходе (дёшево, 304), чтобы после обновления сайта не оставалась старая версия
 <FilesMatch "\.(html|css|js|json)$">
     Header set Cache-Control "no-cache"

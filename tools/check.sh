@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 
 echo "== Синтаксис PHP, Python и JavaScript"
 find php -name '*.php' -print0 | xargs -0 -n1 php -l | { grep -v '^No syntax errors' || true; }
-python3 -m py_compile server.py notifier.py render.py tools/*.py
+python3 -m py_compile render.py seo.py tools/*.py
 node --check public/js/common.js
 node --check public/js/wizard.js
 bash -n tools/publish_deploy.sh
@@ -40,8 +40,5 @@ python3 tools/test_seo.py
 
 echo "== Публикация сборки в ветку deploy (автодеплой)"
 python3 tools/test_publish.py
-
-echo "== Тесты версии на Python"
-python3 tools/test_telegram.py
 
 echo "Все проверки пройдены."

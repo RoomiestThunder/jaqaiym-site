@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace Jq;
 
-/** Время в UTC в том же формате, что писала версия на Python: 2026-11-02T10:00:00+00:00 (сравнивается как строка). */
+/** Время в UTC в формате ISO 8601: 2026-11-02T10:00:00+00:00 (сравнивается как строка). */
 final class Clock
 {
     public static function now(): string
